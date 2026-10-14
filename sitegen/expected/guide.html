@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide</title>
+<style>
+body { font-family: system-ui, sans-serif; line-height: 1.55; color: #1d1d1f; }
+body { max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; padding-bottom: 0.75rem; }
+nav { border-bottom: 1px solid #ddd; }
+nav a[aria-current] { font-weight: 600; text-decoration: none; color: inherit; }
+a { color: #0b57d0; }
+code { font-family: ui-monospace, monospace; background: #f3f3f3; padding: 0 0.2em; }
+pre { background: #f3f3f3; padding: 0.75rem 1rem; overflow-x: auto; }
+pre code { padding: 0; }
+</style>
+</head>
+<body>
+<nav>
+<a href="index.html">Field Notes</a>
+<a href="guide.html" aria-current="page">Guide</a>
+<a href="notes.html">notes</a>
+<a href="page.html">Every construct</a>
+</nav>
+<main>
+<h1>Guide</h1>
+<h2>Convert one file</h2>
+<pre><code>renyi run sitegen.ry convert sample/page.md</code></pre>
+<h2>Build a site</h2>
+<ol>
+<li>Put the Markdown files in one directory.</li>
+<li>Run <code>renyi run sitegen.ry build sample site</code>.</li>
+<li>Open <em>site/index.html</em> in a browser.</li>
+</ol>
+<p>The pages are listed in name order.</p>
+</main>
+</body>
+</html>

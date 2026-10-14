@@ -1,0 +1,48 @@
+{
+  "program": "todo",
+  "recorded_at": "2026-10-14T16:32:21.869Z",
+  "grant": [
+    "filesystem.read(\"sample\")",
+    "environment",
+    "time"
+  ],
+  "calls": [
+    {
+      "sequence": 1,
+      "capability": "filesystem.read(\"sample/todo.json\")",
+      "primitive": "std.filesystem.read_text",
+      "arguments": {
+        "path": "sample/todo.json"
+      },
+      "outcome": {
+        "success": "[\n  {\n    \"id\": 1,\n    \"title\": \"buy milk\",\n    \"tags\": [\n      \"home\"\n    ],\n    \"done\": true,\n    \"added_on\": \"2026-10-01\",\n    \"done_on\": \"2026-10-02\"\n  },\n  {\n    \"id\": 2,\n    \"title\": \"file taxes\",\n    \"tags\": [\n      \"money\"\n    ],\n    \"done\": false,\n    \"added_on\": \"2026-10-02\",\n    \"done_on\": null\n  },\n  {\n    \"id\": 3,\n    \"title\": \"water the plants\",\n    \"tags\": [],\n    \"done\": true,\n    \"added_on\": \"2026-10-05\",\n    \"done_on\": \"2026-10-12\"\n  },\n  {\n    \"id\": 4,\n    \"title\": \"fix the bike\",\n    \"tags\": [\n      \"home\",\n      \"weekend\"\n    ],\n    \"done\": true,\n    \"added_on\": \"2026-10-08\",\n    \"done_on\": \"2026-10-13\"\n  },\n  {\n    \"id\": 5,\n    \"title\": \"call mum\",\n    \"tags\": [],\n    \"done\": false,\n    \"added_on\": \"2026-10-09\",\n    \"done_on\": null\n  },\n  {\n    \"id\": 6,\n    \"title\": \"renew the passport\",\n    \"tags\": [\n      \"admin\",\n      \"travel\"\n    ],\n    \"done\": false,\n    \"added_on\": \"2026-10-12\",\n    \"done_on\": null\n  }\n]\n"
+      },
+      "duration_ms": 0,
+      "at_ms": 0
+    },
+    {
+      "sequence": 2,
+      "capability": "environment(\"TODO_TODAY\")",
+      "primitive": "std.environment.get",
+      "arguments": {
+        "name": "TODO_TODAY"
+      },
+      "outcome": {
+        "success": null
+      },
+      "duration_ms": 0,
+      "at_ms": 0
+    },
+    {
+      "sequence": 3,
+      "capability": "time",
+      "primitive": "std.time.today",
+      "arguments": {},
+      "outcome": {
+        "success": "2026-10-14"
+      },
+      "duration_ms": 0,
+      "at_ms": 0
+    }
+  ]
+}

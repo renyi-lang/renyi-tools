@@ -1,0 +1,228 @@
+module rows
+  purpose: Read the bills CSV into checked bills, naming the file and the line of every bad row.
+
+import std.csv exposing Row, CsvError
+import split exposing Bill
+
+public type BillError is one of
+  purpose: Why the bills could not be read or the report written; the file and, for a row, its line.
+  BadRow(file: Text, line: Integer, detail: Text)
+  BadFile(file: Text, detail: Text)
+end
+
+ability ToText for BillError
+  function to_text(self) returns Text
+    match self
+      when BadRow(file, line, detail) then return "{file}, line {line}: {detail}"
+      when BadFile(file, detail) then return "{file}: {detail}"
+    end
+  end
+end
+
+public let header: Text be "date,payer,amount,description,participants"
+  purpose: The header line of a bills file: the five columns, in this order.
+
+type Draft
+  purpose: One row read and checked; an empty participant list still means everyone.
+  has date: Text
+  has payer: Text
+  has amount: Decimal
+  has description: Text
+  has participants: List of Text
+end
+
+public function is_name(name: Text) returns Boolean
+  purpose: Whether a text is a person's name: a letter, then letters, digits, `_`, `-` or `.`.
+  example: is_name("alice") is true
+  example: is_name("Mary-Jo") is true
+  example: is_name("") is false
+  example: is_name("bob smith") is false
+  example: is_name("2pac") is false
+
+  return name.matches(raw "[A-Za-z][A-Za-z0-9_.-]*")
+end
+
+public function parse_participants(file: Text, line: Integer, cell: Text)
+  returns List of Text
+  or fails with BillError
+  purpose: The names of a `;`-separated cell, in name order without repeats; none for a blank cell.
+  example: parse_participants(file: "b.csv", line: 2, cell: "carol; alice;carol")
+    is ["alice", "carol"]
+  example: parse_participants(file: "b.csv", line: 2, cell: "  ") is []
+  example: parse_participants(file: "b.csv", line: 4, cell: "alice;;bob")
+    fails with BadRow(file: "b.csv", line: 4, detail: "participant 2 is not a name: \"\"")
+  example: parse_participants(file: "b.csv", line: 5, cell: "alice,bob")
+    fails with BadRow(file: "b.csv", line: 5, detail: "participant 1 is not a name: \"alice,bob\"")
+
+  if cell.trim().is_empty() then return [] end
+  let mutable names: List of Text be []
+  for each piece in cell.split(";").with_index()
+    let name be piece.left.trim()
+    if not is_name(name) then
+      let position be piece.right + 1
+      fail with BadRow(
+        file: file,
+        line: line,
+        detail: "participant {position} is not a name: \"{name}\""
+      )
+    end
+    change names to names.append(name)
+  end
+  return names.to_set().sorted()
+end
+
+function required(file: Text, row: Row, column: Text) returns Text or fails with BillError
+  purpose: The trimmed cell under the column; a missing or blank cell is a bad row.
+
+  let cell be row.get(column) otherwise fail with BadRow(
+    file: file,
+    line: row.line,
+    detail: "missing {column}"
+  )
+  let trimmed be cell.trim()
+  if trimmed.is_empty() then
+    fail with BadRow(file: file, line: row.line, detail: "missing {column}")
+  end
+  return trimmed
+end
+
+public function parse_amount(file: Text, line: Integer, cell: Text)
+  returns Decimal
+  or fails with BillError
+  purpose: A positive amount with at most two decimal places, rendered with exactly two.
+  example: parse_amount(file: "b.csv", line: 2, cell: "12.5") is 12.50
+  example: parse_amount(file: "b.csv", line: 3, cell: "ten")
+    fails with BadRow(file: "b.csv", line: 3, detail: "amount is not a number: ten")
+  example: parse_amount(file: "b.csv", line: 4, cell: "0")
+    fails with BadRow(file: "b.csv", line: 4, detail: "amount is not positive: 0")
+  example: parse_amount(file: "b.csv", line: 5, cell: "1.005")
+    fails with BadRow(
+      file: "b.csv",
+      line: 5,
+      detail: "amount has more than two decimal places: 1.005"
+    )
+
+  let amount be cell.to_decimal() otherwise fail with BadRow(
+    file: file,
+    line: line,
+    detail: "amount is not a number: {cell}"
+  )
+  if amount is at most 0.00 then
+    fail with BadRow(file: file, line: line, detail: "amount is not positive: {cell}")
+  end
+  if amount.rounded(2) is not amount then
+    fail with BadRow(
+      file: file,
+      line: line,
+      detail: "amount has more than two decimal places: {cell}"
+    )
+  end
+  return amount.rounded(2)
+end
+
+function parse_row(file: Text, row: Row) returns Draft or fails with BillError
+  purpose: One row's date, payer, amount, description and explicit participants, each checked.
+
+  let date be required(file: file, row: row, column: "date") otherwise fail
+  if not date.matches(raw "[0-9]{4}-[0-9]{2}-[0-9]{2}") then
+    fail with BadRow(file: file, line: row.line, detail: "date is not YYYY-MM-DD: {date}")
+  end
+  let payer be required(file: file, row: row, column: "payer") otherwise fail
+  if not is_name(payer) then
+    fail with BadRow(file: file, line: row.line, detail: "payer is not a name: \"{payer}\"")
+  end
+  let amount_text be required(file: file, row: row, column: "amount") otherwise fail
+  let amount be parse_amount(file: file, line: row.line, cell: amount_text) otherwise fail
+  let description be row.get("description") otherwise ""
+  let cell be row.get("participants") otherwise ""
+  let participants be parse_participants(file: file, line: row.line, cell: cell) otherwise fail
+  return Draft(
+    date: date,
+    payer: payer,
+    amount: amount,
+    description: description.trim(),
+    participants: participants
+  )
+end
+
+function resolved(draft: Draft, everyone: List of Text) returns Bill
+  purpose: The bill of a draft, an empty participant list replaced by everyone.
+
+  let participants be
+    if draft.participants.is_empty() then everyone otherwise draft.participants end
+  return Bill(
+    date: draft.date,
+    payer: draft.payer,
+    amount: draft.amount,
+    description: draft.description,
+    participants: participants
+  )
+end
+
+function check_header(file: Text, text: Text) or fails with BillError
+  purpose: Fail unless the first line names the five columns.
+
+  let header be text.lines().first() otherwise fail with BadFile(
+    file: file,
+    detail: "the file is empty"
+  )
+  let columns be for each column in header.split(",") collect column.trim()
+  for each wanted in ["date", "payer", "amount", "description", "participants"]
+    if not columns.contains(wanted) then
+      fail with BadFile(file: file, detail: "the header has no column {wanted}")
+    end
+  end
+end
+
+function csv_error(file: Text, error: CsvError) returns BillError
+  purpose: The bill error of a CSV error, with its line when it has one.
+
+  match error
+    when Malformed(line, detail) then return BadRow(file: file, line: line, detail: detail)
+    when MissingHeader then return BadFile(file: file, detail: "the file has no header line")
+  end
+end
+
+public function parse_bills(file: Text, text: Text) returns List of Bill or fails with BillError
+  purpose: Every row of the CSV text as a bill; no participants means everyone named in the text.
+  example: parse_bills(
+    file: "b.csv",
+    text: "{header}\n2026-01-02,bob,9,pizza,\n2026-01-03,alice,4,tea,alice\n"
+  ) is [
+    Bill(
+      date: "2026-01-02",
+      payer: "bob",
+      amount: 9.00,
+      description: "pizza",
+      participants: ["alice", "bob"]
+    ),
+    Bill(
+      date: "2026-01-03",
+      payer: "alice",
+      amount: 4.00,
+      description: "tea",
+      participants: ["alice"]
+    )
+  ]
+  example: parse_bills(file: "b.csv", text: "{header}\n2026-01-02,bob,9,pizza\n")
+    fails with BadRow(file: "b.csv", line: 2, detail: "the row has 4 cells, the header 5")
+  example: parse_bills(file: "b.csv", text: "date,payer,amount\n")
+    fails with BadFile(file: "b.csv", detail: "the header has no column description")
+
+  check_header(file: file, text: text) otherwise fail
+  let mutable parsed: List of Row be []
+  match csv.parse(text)
+    when success(found) then change parsed to found
+    when failure(error) then fail with csv_error(file: file, error: error)
+  end
+  let mutable drafts: List of Draft be []
+  for each row in parsed
+    let draft be parse_row(file: file, row: row) otherwise fail
+    change drafts to drafts.append(draft)
+  end
+  let named be
+    for each draft in drafts, person in draft.participants.append(draft.payer)
+    collect person
+  let everyone be named.to_set().sorted()
+  return for each draft in drafts collect resolved(draft: draft, everyone: everyone)
+end

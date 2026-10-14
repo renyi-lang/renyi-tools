@@ -1,0 +1,162 @@
+{
+  "program": "sitegen",
+  "recorded_at": "2026-10-14T16:31:40.433Z",
+  "grant": [
+    "filesystem.read",
+    "filesystem.write"
+  ],
+  "calls": [
+    {
+      "sequence": 1,
+      "capability": "filesystem.read(\"sample\")",
+      "primitive": "std.filesystem.list",
+      "arguments": {
+        "path": "sample"
+      },
+      "outcome": {
+        "success": [
+          "sample/guide.md",
+          "sample/index.md",
+          "sample/notes.md",
+          "sample/page.md"
+        ]
+      },
+      "duration_ms": 1,
+      "at_ms": 0
+    },
+    {
+      "sequence": 2,
+      "capability": "filesystem.read(\"sample/guide.md\")",
+      "primitive": "std.filesystem.read_text",
+      "arguments": {
+        "path": "sample/guide.md"
+      },
+      "outcome": {
+        "success": "# Guide\n\n## Convert one file\n\n```\nrenyi run sitegen.ry convert sample/page.md\n```\n\n## Build a site\n\n1. Put the Markdown files in one directory.\n2. Run `renyi run sitegen.ry build sample site`.\n3. Open *site/index.html* in a browser.\n\nThe pages are listed in name order.\n"
+      },
+      "duration_ms": 0,
+      "at_ms": 1
+    },
+    {
+      "sequence": 3,
+      "capability": "filesystem.read(\"sample/index.md\")",
+      "primitive": "std.filesystem.read_text",
+      "arguments": {
+        "path": "sample/index.md"
+      },
+      "outcome": {
+        "success": "# Field Notes\n\nA small site built by **sitegen**, a static site generator written in Renyi.\n\nEvery page here was a Markdown file in `sample/`. Start with the [guide](guide.html)\nor read the [page of every construct](page.html).\n"
+      },
+      "duration_ms": 0,
+      "at_ms": 2
+    },
+    {
+      "sequence": 4,
+      "capability": "filesystem.read(\"sample/notes.md\")",
+      "primitive": "std.filesystem.read_text",
+      "arguments": {
+        "path": "sample/notes.md"
+      },
+      "outcome": {
+        "success": "This page has no heading, so its title is its file name.\n\n- one\n- two\n\nA paragraph after the list,\nwritten on two lines.\n"
+      },
+      "duration_ms": 0,
+      "at_ms": 2
+    },
+    {
+      "sequence": 5,
+      "capability": "filesystem.read(\"sample/page.md\")",
+      "primitive": "std.filesystem.read_text",
+      "arguments": {
+        "path": "sample/page.md"
+      },
+      "outcome": {
+        "success": "# Every construct\n\nThis page uses each part of the Markdown subset once or more.\n\n## Inline markup\n\nText can be **bold**, *italic* or `inline code`, and a link goes\n[back to the index](index.html). Reserved characters are escaped: 1 < 2 && 3 > 2.\n\nA `code span keeps <tags> & *stars*` as they are.\n\n### Lists\n\n- apples\n- pears with **a bold word**\n- a [link in a list](guide.html)\n\n1. first step\n2. second step, in `code`\n3. third step\n\n## A fenced block\n\n```ry\nfunction greet(name: Text) returns Text\n  return \"<b>{name}</b> & more\"\nend\n```\n\nThe block above keeps its lines and escapes <b> and &.\n"
+      },
+      "duration_ms": 0,
+      "at_ms": 2
+    },
+    {
+      "sequence": 6,
+      "capability": "filesystem.read(\"test_out\")",
+      "primitive": "std.filesystem.exists",
+      "arguments": {
+        "path": "test_out"
+      },
+      "outcome": {
+        "success": false
+      },
+      "duration_ms": 0,
+      "at_ms": 2
+    },
+    {
+      "sequence": 7,
+      "capability": "filesystem.write(\"test_out\")",
+      "primitive": "std.filesystem.create_directory",
+      "arguments": {
+        "path": "test_out"
+      },
+      "outcome": {
+        "success": null
+      },
+      "duration_ms": 1,
+      "at_ms": 2
+    },
+    {
+      "sequence": 8,
+      "capability": "filesystem.write(\"test_out/index.html\")",
+      "primitive": "std.filesystem.write_text",
+      "arguments": {
+        "path": "test_out/index.html",
+        "content": "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Field Notes</title>\n<style>\nbody { font-family: system-ui, sans-serif; line-height: 1.55; color: #1d1d1f; }\nbody { max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }\nnav { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; padding-bottom: 0.75rem; }\nnav { border-bottom: 1px solid #ddd; }\nnav a[aria-current] { font-weight: 600; text-decoration: none; color: inherit; }\na { color: #0b57d0; }\ncode { font-family: ui-monospace, monospace; background: #f3f3f3; padding: 0 0.2em; }\npre { background: #f3f3f3; padding: 0.75rem 1rem; overflow-x: auto; }\npre code { padding: 0; }\n</style>\n</head>\n<body>\n<nav>\n<a href=\"index.html\" aria-current=\"page\">Field Notes</a>\n<a href=\"guide.html\">Guide</a>\n<a href=\"notes.html\">notes</a>\n<a href=\"page.html\">Every construct</a>\n</nav>\n<main>\n<h1>Field Notes</h1>\n<p>A small site built by <strong>sitegen</strong>, a static site generator written in Renyi.</p>\n<p>Every page here was a Markdown file in <code>sample/</code>. Start with the <a href=\"guide.html\">guide</a>\nor read the <a href=\"page.html\">page of every construct</a>.</p>\n<h2>Pages</h2>\n<ul class=\"pages\">\n<li><a href=\"guide.html\">Guide</a></li>\n<li><a href=\"notes.html\">notes</a></li>\n<li><a href=\"page.html\">Every construct</a></li>\n</ul>\n</main>\n</body>\n</html>\n"
+      },
+      "outcome": {
+        "success": null
+      },
+      "duration_ms": 2,
+      "at_ms": 3
+    },
+    {
+      "sequence": 9,
+      "capability": "filesystem.write(\"test_out/guide.html\")",
+      "primitive": "std.filesystem.write_text",
+      "arguments": {
+        "path": "test_out/guide.html",
+        "content": "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Guide</title>\n<style>\nbody { font-family: system-ui, sans-serif; line-height: 1.55; color: #1d1d1f; }\nbody { max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }\nnav { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; padding-bottom: 0.75rem; }\nnav { border-bottom: 1px solid #ddd; }\nnav a[aria-current] { font-weight: 600; text-decoration: none; color: inherit; }\na { color: #0b57d0; }\ncode { font-family: ui-monospace, monospace; background: #f3f3f3; padding: 0 0.2em; }\npre { background: #f3f3f3; padding: 0.75rem 1rem; overflow-x: auto; }\npre code { padding: 0; }\n</style>\n</head>\n<body>\n<nav>\n<a href=\"index.html\">Field Notes</a>\n<a href=\"guide.html\" aria-current=\"page\">Guide</a>\n<a href=\"notes.html\">notes</a>\n<a href=\"page.html\">Every construct</a>\n</nav>\n<main>\n<h1>Guide</h1>\n<h2>Convert one file</h2>\n<pre><code>renyi run sitegen.ry convert sample/page.md</code></pre>\n<h2>Build a site</h2>\n<ol>\n<li>Put the Markdown files in one directory.</li>\n<li>Run <code>renyi run sitegen.ry build sample site</code>.</li>\n<li>Open <em>site/index.html</em> in a browser.</li>\n</ol>\n<p>The pages are listed in name order.</p>\n</main>\n</body>\n</html>\n"
+      },
+      "outcome": {
+        "success": null
+      },
+      "duration_ms": 1,
+      "at_ms": 5
+    },
+    {
+      "sequence": 10,
+      "capability": "filesystem.write(\"test_out/notes.html\")",
+      "primitive": "std.filesystem.write_text",
+      "arguments": {
+        "path": "test_out/notes.html",
+        "content": "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>notes</title>\n<style>\nbody { font-family: system-ui, sans-serif; line-height: 1.55; color: #1d1d1f; }\nbody { max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }\nnav { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; padding-bottom: 0.75rem; }\nnav { border-bottom: 1px solid #ddd; }\nnav a[aria-current] { font-weight: 600; text-decoration: none; color: inherit; }\na { color: #0b57d0; }\ncode { font-family: ui-monospace, monospace; background: #f3f3f3; padding: 0 0.2em; }\npre { background: #f3f3f3; padding: 0.75rem 1rem; overflow-x: auto; }\npre code { padding: 0; }\n</style>\n</head>\n<body>\n<nav>\n<a href=\"index.html\">Field Notes</a>\n<a href=\"guide.html\">Guide</a>\n<a href=\"notes.html\" aria-current=\"page\">notes</a>\n<a href=\"page.html\">Every construct</a>\n</nav>\n<main>\n<p>This page has no heading, so its title is its file name.</p>\n<ul>\n<li>one</li>\n<li>two</li>\n</ul>\n<p>A paragraph after the list,\nwritten on two lines.</p>\n</main>\n</body>\n</html>\n"
+      },
+      "outcome": {
+        "success": null
+      },
+      "duration_ms": 1,
+      "at_ms": 6
+    },
+    {
+      "sequence": 11,
+      "capability": "filesystem.write(\"test_out/page.html\")",
+      "primitive": "std.filesystem.write_text",
+      "arguments": {
+        "path": "test_out/page.html",
+        "content": "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Every construct</title>\n<style>\nbody { font-family: system-ui, sans-serif; line-height: 1.55; color: #1d1d1f; }\nbody { max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }\nnav { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; padding-bottom: 0.75rem; }\nnav { border-bottom: 1px solid #ddd; }\nnav a[aria-current] { font-weight: 600; text-decoration: none; color: inherit; }\na { color: #0b57d0; }\ncode { font-family: ui-monospace, monospace; background: #f3f3f3; padding: 0 0.2em; }\npre { background: #f3f3f3; padding: 0.75rem 1rem; overflow-x: auto; }\npre code { padding: 0; }\n</style>\n</head>\n<body>\n<nav>\n<a href=\"index.html\">Field Notes</a>\n<a href=\"guide.html\">Guide</a>\n<a href=\"notes.html\">notes</a>\n<a href=\"page.html\" aria-current=\"page\">Every construct</a>\n</nav>\n<main>\n<h1>Every construct</h1>\n<p>This page uses each part of the Markdown subset once or more.</p>\n<h2>Inline markup</h2>\n<p>Text can be <strong>bold</strong>, <em>italic</em> or <code>inline code</code>, and a link goes\n<a href=\"index.html\">back to the index</a>. Reserved characters are escaped: 1 &lt; 2 &amp;&amp; 3 &gt; 2.</p>\n<p>A <code>code span keeps &lt;tags&gt; &amp; *stars*</code> as they are.</p>\n<h3>Lists</h3>\n<ul>\n<li>apples</li>\n<li>pears with <strong>a bold word</strong></li>\n<li>a <a href=\"guide.html\">link in a list</a></li>\n</ul>\n<ol>\n<li>first step</li>\n<li>second step, in <code>code</code></li>\n<li>third step</li>\n</ol>\n<h2>A fenced block</h2>\n<pre><code class=\"language-ry\">function greet(name: Text) returns Text\n  return \"&lt;b&gt;{name}&lt;/b&gt; &amp; more\"\nend</code></pre>\n<p>The block above keeps its lines and escapes &lt;b&gt; and &amp;.</p>\n</main>\n</body>\n</html>\n"
+      },
+      "outcome": {
+        "success": null
+      },
+      "duration_ms": 1,
+      "at_ms": 7
+    }
+  ]
+}

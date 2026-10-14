@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # the released toolchain, through the project's installer
+      - name: Install renyi
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/renyi-lang/renyi/main/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Version
+        run: renyi --version
+      - name: Every tool
+        run: sh check.sh renyi

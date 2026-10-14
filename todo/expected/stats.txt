@@ -1,0 +1,9 @@
+6 items: 3 open, 3 done
+done this week (since 2026-10-12): 2
+tags:
+  #admin        1 open, 0 done
+  #home         0 open, 2 done
+  #money        1 open, 0 done
+  #travel       1 open, 0 done
+  #weekend      0 open, 1 done
+  untagged items: 2

@@ -1,0 +1,320 @@
+module split
+  purpose: Split shared bills to the cent, total what each person paid and owes, settle up.
+
+public type Bill
+  purpose: One cleaned bill: when, who paid, how much, what for, and who shares it (never empty).
+  has date: Text
+  has payer: Text
+  has amount: Decimal
+  has description: Text
+  has participants: List of Text
+end
+
+public type Share
+  purpose: One participant's part of one bill.
+  has person: Text
+  has amount: Decimal
+end
+
+public type Balance
+  purpose: What one person paid, what their shares add up to, and the difference (paid - owed).
+  has person: Text
+  has paid: Decimal
+  has owed: Decimal
+  has net: Decimal
+end
+
+public type Transfer
+  purpose: One payment of the settlement: the debtor pays the creditor the amount.
+  has debtor: Text
+  has creditor: Text
+  has amount: Decimal
+end
+
+public type MonthTotal
+  purpose: One person's paid and owed totals within one month (the date's first seven characters).
+  has month: Text
+  has person: Text
+  has paid: Decimal
+  has owed: Decimal
+  has net: Decimal
+end
+
+public function cents_to_amount(cents: Integer) returns Decimal
+  purpose: A whole number of cents as an amount with exactly two decimal places.
+  example: cents_to_amount(1234) is 12.34
+  example: cents_to_amount(5) is 0.05
+
+  return (cents.to_decimal() / 100.00).rounded(2)
+end
+
+function share_cents(base: Integer, extra: Integer, index: Integer) returns Integer
+  purpose: The cents of the participant at the index: the base, plus one for the first extra ones.
+
+  if index is less than extra then return base + 1 end
+  return base
+end
+
+public function shares(amount: Decimal, participants: List of Text) returns List of Share
+  purpose: Split whole cents equally; leftover cents go one each to the first names in name order.
+  example: shares(amount: 9.00, participants: ["bob", "alice"])
+    is [Share(person: "alice", amount: 4.50), Share(person: "bob", amount: 4.50)]
+  example: shares(amount: 10.00, participants: ["carol", "alice", "bob"])
+    is [
+      Share(person: "alice", amount: 3.34),
+      Share(person: "bob", amount: 3.33),
+      Share(person: "carol", amount: 3.33)
+    ]
+  example: shares(amount: 0.05, participants: ["dave", "carol", "bob", "alice"])
+    is [
+      Share(person: "alice", amount: 0.02),
+      Share(person: "bob", amount: 0.01),
+      Share(person: "carol", amount: 0.01),
+      Share(person: "dave", amount: 0.01)
+    ]
+  example: shares(amount: 5.00, participants: []) is []
+
+  let names be participants.to_set().sorted()
+  if names.is_empty() then return [] end
+  let cents be (amount * 100.00).truncated()
+  let base be cents.quotient(names.length())
+  let extra be cents remainder names.length()
+  return for each named in names.with_index()
+    collect Share(
+      person: named.left,
+      amount: cents_to_amount(share_cents(base: base, extra: extra, index: named.right))
+    )
+end
+
+function balance_of(person: Text, paid: Map of Text to Decimal, owed: Map of Text to Decimal)
+  returns Balance
+  purpose: One person's balance from the totals paid and owed by name.
+
+  let paid_total be paid.get(person) otherwise 0.00
+  let owed_total be owed.get(person) otherwise 0.00
+  return Balance(
+    person: person,
+    paid: paid_total.rounded(2),
+    owed: owed_total.rounded(2),
+    net: (paid_total - owed_total).rounded(2)
+  )
+end
+
+public function balances(bills: List of Bill) returns List of Balance
+  purpose: Every person who paid or shares a bill, in name order, with paid, owed and net totals.
+  example: balances([]) is []
+  example: balances(
+    [
+      Bill(
+        date: "2026-01-05",
+        payer: "alice",
+        amount: 10.00,
+        description: "pizza",
+        participants: ["alice", "bob", "carol"]
+      )
+    ]
+  ) is [
+    Balance(person: "alice", paid: 10.00, owed: 3.34, net: 6.66),
+    Balance(person: "bob", paid: 0.00, owed: 3.33, net: -3.33),
+    Balance(person: "carol", paid: 0.00, owed: 3.33, net: -3.33)
+  ]
+
+  let paid be for each bill in bills group by bill.payer sum bill.amount
+  let parts be
+    for each bill in bills, part in shares(amount: bill.amount, participants: bill.participants)
+    collect part
+  let owed be for each part in parts group by part.person sum part.amount
+  let people be paid.keys().append_all(owed.keys()).to_set().sorted()
+  return for each person in people collect balance_of(person: person, paid: paid, owed: owed)
+end
+
+type Position
+  purpose: A person's balance still open during the settlement.
+  has person: Text
+  has net: Decimal
+end
+
+function moved(position: Position, transfer: Transfer) returns Position
+  purpose: The position after the transfer: the debtor's net rises, the creditor's falls.
+
+  if position.person is transfer.debtor then
+    return position with net: position.net + transfer.amount
+  end
+  if position.person is transfer.creditor then
+    return position with net: position.net - transfer.amount
+  end
+  return position
+end
+
+public function settle(ledger: List of Balance) returns List of Transfer
+  purpose: Transfers that zero every balance: largest debtor pays largest creditor, repeated.
+  example: settle([]) is []
+  example: settle(
+    [
+      Balance(person: "alice", paid: 10.00, owed: 3.34, net: 6.66),
+      Balance(person: "bob", paid: 0.00, owed: 3.33, net: -3.33),
+      Balance(person: "carol", paid: 0.00, owed: 3.33, net: -3.33)
+    ]
+  ) is [
+    Transfer(debtor: "bob", creditor: "alice", amount: 3.33),
+    Transfer(debtor: "carol", creditor: "alice", amount: 3.33)
+  ]
+  example: settle(
+    [
+      Balance(person: "alice", paid: 0.00, owed: 30.00, net: -30.00),
+      Balance(person: "bob", paid: 0.00, owed: 10.00, net: -10.00),
+      Balance(person: "carol", paid: 25.00, owed: 0.00, net: 25.00),
+      Balance(person: "dave", paid: 15.00, owed: 0.00, net: 15.00)
+    ]
+  ) is [
+    Transfer(debtor: "alice", creditor: "carol", amount: 25.00),
+    Transfer(debtor: "bob", creditor: "dave", amount: 10.00),
+    Transfer(debtor: "alice", creditor: "dave", amount: 5.00)
+  ]
+
+  let mutable open be
+    for each balance in ledger
+    where balance.net is not 0.00
+    sorted by balance.person
+    collect Position(person: balance.person, net: balance.net)
+  let mutable transfers: List of Transfer be []
+  repeat until open.is_empty()
+    let debtor be for each position in open sorted by position.net first otherwise break
+    let creditor be
+      for each position in open sorted by position.net descending first otherwise break
+    if debtor.net is at least 0.00 or creditor.net is at most 0.00 then
+      crash with "the balances do not sum to zero"
+    end
+    let transfer be Transfer(
+      debtor: debtor.person,
+      creditor: creditor.person,
+      amount: (0.00 - debtor.net).at_most(creditor.net).rounded(2)
+    )
+    change transfers to transfers.append(transfer)
+    change open to
+      for each position in open
+      where moved(position: position, transfer: transfer).net is not 0.00
+      collect moved(position: position, transfer: transfer)
+  end
+  return transfers
+end
+
+public function remaining(ledger: List of Balance, transfers: List of Transfer)
+  returns List of Balance
+  purpose: The balances after the transfers are paid; after a full settlement every net is zero.
+  example: remaining(
+    ledger: [
+      Balance(person: "alice", paid: 4.00, owed: 2.00, net: 2.00),
+      Balance(person: "bob", paid: 0.00, owed: 2.00, net: -2.00)
+    ],
+    transfers: [Transfer(debtor: "bob", creditor: "alice", amount: 2.00)]
+  ) is [
+    Balance(person: "alice", paid: 4.00, owed: 2.00, net: 0.00),
+    Balance(person: "bob", paid: 0.00, owed: 2.00, net: 0.00)
+  ]
+
+  let mutable after be ledger
+  for each transfer in transfers
+    change after to
+      for each balance in after
+      collect balance
+        with net: moved(
+          position: Position(person: balance.person, net: balance.net),
+          transfer: transfer
+        ).net
+  end
+  return after
+end
+
+public function month_of(bill: Bill) returns Text
+  purpose: The month a bill belongs to: the first seven characters of its date.
+  example: month_of(
+    Bill(
+      date: "2026-03-14",
+      payer: "alice",
+      amount: 1.00,
+      description: "tea",
+      participants: ["alice"]
+    )
+  ) is "2026-03"
+
+  return bill.date.take(7)
+end
+
+public function monthly(bills: List of Bill) returns List of MonthTotal
+  purpose: For each month in order, each person in that month's bills with paid and owed totals.
+  example: monthly([]) is []
+  example: monthly(
+    [
+      Bill(
+        date: "2026-02-01",
+        payer: "bob",
+        amount: 6.00,
+        description: "taxi",
+        participants: ["alice", "bob"]
+      ),
+      Bill(
+        date: "2026-01-20",
+        payer: "alice",
+        amount: 4.00,
+        description: "tea",
+        participants: ["alice"]
+      )
+    ]
+  ) is [
+    MonthTotal(month: "2026-01", person: "alice", paid: 4.00, owed: 4.00, net: 0.00),
+    MonthTotal(month: "2026-02", person: "alice", paid: 0.00, owed: 3.00, net: -3.00),
+    MonthTotal(month: "2026-02", person: "bob", paid: 6.00, owed: 3.00, net: 3.00)
+  ]
+
+  let months be for each bill in bills collect month_of(bill)
+  let mutable totals: List of MonthTotal be []
+  for each month in months.to_set().sorted()
+    let these be for each bill in bills where month_of(bill) is month collect bill
+    for each balance in balances(these)
+      change totals to totals.append(
+        MonthTotal(
+          month: month,
+          person: balance.person,
+          paid: balance.paid,
+          owed: balance.owed,
+          net: balance.net
+        )
+      )
+    end
+  end
+  return totals
+end
+
+test "the balances sum to zero and the settlement zeroes them"
+  let bills be [
+    Bill(
+      date: "2026-01-02",
+      payer: "alice",
+      amount: 100.00,
+      description: "groceries",
+      participants: ["alice", "bob", "carol"]
+    ),
+    Bill(
+      date: "2026-01-09",
+      payer: "bob",
+      amount: 33.35,
+      description: "cinema",
+      participants: ["bob", "carol", "dave"]
+    ),
+    Bill(
+      date: "2026-02-11",
+      payer: "dave",
+      amount: 0.07,
+      description: "stamp",
+      participants: ["alice", "bob", "carol", "dave"]
+    )
+  ]
+  let open be balances(bills)
+  let net_total be for each balance in open sum balance.net
+  check net_total is 0.00
+  let after be remaining(ledger: open, transfers: settle(open))
+  check for each balance in after
+  all balance.net is 0.00
+  check settle(open).length() is at most open.length() - 1
+end

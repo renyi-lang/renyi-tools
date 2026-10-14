@@ -1,0 +1,60 @@
+[
+  {
+    "id": 1,
+    "title": "buy milk",
+    "tags": [
+      "home"
+    ],
+    "done": true,
+    "added_on": "2026-10-01",
+    "done_on": "2026-10-02"
+  },
+  {
+    "id": 2,
+    "title": "file taxes",
+    "tags": [
+      "money"
+    ],
+    "done": false,
+    "added_on": "2026-10-02",
+    "done_on": null
+  },
+  {
+    "id": 3,
+    "title": "water the plants",
+    "tags": [],
+    "done": true,
+    "added_on": "2026-10-05",
+    "done_on": "2026-10-12"
+  },
+  {
+    "id": 4,
+    "title": "fix the bike",
+    "tags": [
+      "home",
+      "weekend"
+    ],
+    "done": true,
+    "added_on": "2026-10-08",
+    "done_on": "2026-10-13"
+  },
+  {
+    "id": 5,
+    "title": "call mum",
+    "tags": [],
+    "done": false,
+    "added_on": "2026-10-09",
+    "done_on": null
+  },
+  {
+    "id": 6,
+    "title": "renew the passport",
+    "tags": [
+      "admin",
+      "travel"
+    ],
+    "done": false,
+    "added_on": "2026-10-12",
+    "done_on": null
+  }
+]

@@ -1,0 +1,3 @@
+dave pays carol 332.88
+dave pays bob 261.41
+dave pays alice 179.92

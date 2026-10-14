@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Every construct</title>
+<style>
+body { font-family: system-ui, sans-serif; line-height: 1.55; color: #1d1d1f; }
+body { max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; padding-bottom: 0.75rem; }
+nav { border-bottom: 1px solid #ddd; }
+nav a[aria-current] { font-weight: 600; text-decoration: none; color: inherit; }
+a { color: #0b57d0; }
+code { font-family: ui-monospace, monospace; background: #f3f3f3; padding: 0 0.2em; }
+pre { background: #f3f3f3; padding: 0.75rem 1rem; overflow-x: auto; }
+pre code { padding: 0; }
+</style>
+</head>
+<body>
+<nav>
+<a href="index.html">Field Notes</a>
+<a href="guide.html">Guide</a>
+<a href="notes.html">notes</a>
+<a href="page.html" aria-current="page">Every construct</a>
+</nav>
+<main>
+<h1>Every construct</h1>
+<p>This page uses each part of the Markdown subset once or more.</p>
+<h2>Inline markup</h2>
+<p>Text can be <strong>bold</strong>, <em>italic</em> or <code>inline code</code>, and a link goes
+<a href="index.html">back to the index</a>. Reserved characters are escaped: 1 &lt; 2 &amp;&amp; 3 &gt; 2.</p>
+<p>A <code>code span keeps &lt;tags&gt; &amp; *stars*</code> as they are.</p>
+<h3>Lists</h3>
+<ul>
+<li>apples</li>
+<li>pears with <strong>a bold word</strong></li>
+<li>a <a href="guide.html">link in a list</a></li>
+</ul>
+<ol>
+<li>first step</li>
+<li>second step, in <code>code</code></li>
+<li>third step</li>
+</ol>
+<h2>A fenced block</h2>
+<pre><code class="language-ry">function greet(name: Text) returns Text
+  return "&lt;b&gt;{name}&lt;/b&gt; &amp; more"
+end</code></pre>
+<p>The block above keeps its lines and escapes &lt;b&gt; and &amp;.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,349 @@
+module items
+  purpose: The to-do list's logic without effects: tags, ids, toggles, filters and statistics.
+
+import std.time exposing Date
+
+public type Item
+  purpose: One entry of the store: its id, its title without tags, its tags and its dates.
+  has id: Integer
+  has title: Text
+  has labels: List of Text as "tags"
+  has done: Boolean
+  has added_on: Text
+  has done_on: maybe Text
+  can FromJson
+  can ToJson
+end
+
+public type TodoError is one of
+  purpose: Why a command could not be carried out.
+  UnknownCommand(name: Text)
+  UnknownOption(command: Text, option: Text)
+  MissingArgument(command: Text, what: Text)
+  BadId(text: Text)
+  NoSuchItem(id: Integer)
+  EmptyTitle
+  AlreadyDone(id: Integer)
+  NotDone(id: Integer)
+  BadStore(detail: Text)
+  BadToday(text: Text)
+end
+
+public type TagCount
+  purpose: How many open and done items carry one tag.
+  has tag: Text
+  has open: Integer
+  has done: Integer
+end
+
+public type Stats
+  purpose: The counts the stats command prints.
+  has total: Integer
+  has open: Integer
+  has done: Integer
+  has week_start: Date
+  has done_this_week: Integer
+  has untagged: Integer
+  has per_tag: List of TagCount
+end
+
+let milk: Item be Item(
+  id: 1,
+  title: "buy milk",
+  labels: ["home"],
+  done: true,
+  added_on: "2026-10-05",
+  done_on: "2026-10-06"
+)
+  purpose: A done item of the examples, done last week.
+
+let taxes: Item be Item(
+  id: 2,
+  title: "file taxes",
+  labels: ["money"],
+  done: false,
+  added_on: "2026-10-06",
+  done_on: nothing
+)
+  purpose: An open item of the examples.
+
+let bike: Item be Item(
+  id: 4,
+  title: "fix the bike",
+  labels: ["home", "weekend"],
+  done: true,
+  added_on: "2026-10-12",
+  done_on: "2026-10-13"
+)
+  purpose: A done item of the examples with two tags, done in the week of 2026-10-12.
+
+let mum: Item be Item(
+  id: 5,
+  title: "call mum",
+  labels: [],
+  done: false,
+  added_on: "2026-10-13",
+  done_on: nothing
+)
+  purpose: An open item of the examples without tags.
+
+let demo_store: List of Item be [milk, taxes, bike, mum]
+  purpose: The store of the examples; id 3 was removed.
+
+function is_tag(word: Text) returns Boolean
+  purpose: A word of a title that names a tag: a hash sign followed by at least one character.
+  example: is_tag("#home") is true
+  example: is_tag("#") is false
+  example: is_tag("home") is false
+
+  return word.starts_with("#") and word.length() is greater than 1
+end
+
+public function parse_tags(title: Text) returns List of Text
+  purpose: The tags of a title, the words that start with a hash sign, lower case, each once.
+  example: parse_tags("buy milk #home #Errand #home") is ["home", "errand"]
+  example: parse_tags("call mum") is []
+  example: parse_tags("# is not a tag") is []
+
+  let found be for each word in title.split(" ") where is_tag(word) collect word.drop(1).to_lower()
+  return found.distinct()
+end
+
+public function plain_title(title: Text) returns Text
+  purpose: The title without its tags and without repeated spaces.
+  example: plain_title("buy  milk #home") is "buy milk"
+  example: plain_title("#home") is ""
+
+  let words be
+    for each word in title.split(" ")
+    where not word.is_empty() and not is_tag(word)
+    collect word
+  return words.join(" ")
+end
+
+public function next_id(store: List of Item) returns Integer
+  purpose: One more than the largest id of the store; 1 for an empty store.
+  example: next_id(demo_store) is 6
+  example: next_id([]) is 1
+
+  let ids be for each item in store collect item.id
+  let highest be ids.largest() otherwise 0
+  return highest + 1
+end
+
+public function parse_id(text: Text) returns Integer or fails with TodoError
+  purpose: An item's id written on the command line: a whole number of at least 1.
+  example: parse_id("4") is 4
+  example: parse_id("four") fails with BadId(text: "four")
+  example: parse_id("0") fails with BadId(text: "0")
+
+  let id be text.to_integer() otherwise fail with BadId(text: text)
+  if id is less than 1 then fail with BadId(text: text) end
+  return id
+end
+
+public function find(store: List of Item, id: Integer) returns Item or fails with TodoError
+  purpose: The item with the id.
+  example: find(store: demo_store, id: 5) is mum
+  example: find(store: demo_store, id: 3) fails with NoSuchItem(id: 3)
+
+  let found be for each item in store where item.id is id first
+  return found otherwise fail with NoSuchItem(id: id)
+end
+
+function replaced(store: List of Item, updated: Item) returns List of Item
+  purpose: The store with the item of the same id replaced by the updated one.
+  example: replaced(store: [milk, taxes], updated: taxes with title: "pay taxes")
+    is [milk, taxes with title: "pay taxes"]
+
+  let mutable result: List of Item be []
+  for each item in store
+    if item.id is updated.id then
+      change result to result.append(updated)
+    otherwise
+      change result to result.append(item)
+    end
+  end
+  return result
+end
+
+public function added(store: List of Item, title: Text, today: Text)
+  returns List of Item
+  or fails with TodoError
+  purpose: The store with a new open item last, its tags taken from the title's hash words.
+  example: added(store: [], title: "water the plants #home", today: "2026-10-14")
+    is [
+      Item(
+        id: 1,
+        title: "water the plants",
+        labels: ["home"],
+        done: false,
+        added_on: "2026-10-14",
+        done_on: nothing
+      )
+    ]
+  example: added(store: [], title: "#home", today: "2026-10-14") fails with EmptyTitle
+
+  let words be plain_title(title)
+  if words.is_empty() then fail with EmptyTitle end
+  let item be Item(
+    id: next_id(store),
+    title: words,
+    labels: parse_tags(title),
+    done: false,
+    added_on: today,
+    done_on: nothing
+  )
+  return store.append(item)
+end
+
+public function marked_done(store: List of Item, id: Integer, today: Text)
+  returns List of Item
+  or fails with TodoError
+  purpose: The store with the item marked done today.
+  example: marked_done(store: [taxes], id: 2, today: "2026-10-14")
+    is [taxes with done: true, done_on: "2026-10-14"]
+  example: marked_done(store: demo_store, id: 1, today: "2026-10-14") fails with AlreadyDone(id: 1)
+
+  let item be find(store: store, id: id) otherwise fail
+  if item.done then fail with AlreadyDone(id: id) end
+  return replaced(store: store, updated: item with done: true, done_on: today)
+end
+
+public function reopened(store: List of Item, id: Integer)
+  returns List of Item
+  or fails with TodoError
+  purpose: The store with a done item open again and its done date cleared.
+  example: reopened(store: [milk], id: 1) is [milk with done: false, done_on: nothing]
+  example: reopened(store: demo_store, id: 2) fails with NotDone(id: 2)
+
+  let item be find(store: store, id: id) otherwise fail
+  if not item.done then fail with NotDone(id: id) end
+  return replaced(store: store, updated: item with done: false, done_on: nothing)
+end
+
+public function retitled(store: List of Item, id: Integer, title: Text)
+  returns List of Item
+  or fails with TodoError
+  purpose: The store with the item's title and tags taken from a new title; its dates are kept.
+  example: retitled(store: [mum], id: 5, title: "call dad #family")
+    is [mum with title: "call dad", labels: ["family"]]
+  example: retitled(store: demo_store, id: 5, title: " ") fails with EmptyTitle
+
+  let item be find(store: store, id: id) otherwise fail
+  let words be plain_title(title)
+  if words.is_empty() then fail with EmptyTitle end
+  return replaced(store: store, updated: item with title: words, labels: parse_tags(title))
+end
+
+public function removed(store: List of Item, id: Integer)
+  returns List of Item
+  or fails with TodoError
+  purpose: The store without the item.
+  example: removed(store: [milk, taxes], id: 1) is [taxes]
+  example: removed(store: demo_store, id: 9) fails with NoSuchItem(id: 9)
+
+  let gone be find(store: store, id: id) otherwise fail
+  return for each item in store where item.id is not gone.id collect item
+end
+
+public function cleared(store: List of Item) returns List of Item
+  purpose: The store without its done items.
+  example: cleared(demo_store).length() is 2
+  example: cleared([]) is []
+
+  return for each item in store where not item.done collect item
+end
+
+function has_tag(item: Item, tag: maybe Text) returns Boolean
+  purpose: Whether the item carries the tag; every item does when no tag is asked for.
+  example: has_tag(item: bike, tag: "home") is true
+  example: has_tag(item: mum, tag: "home") is false
+  example: has_tag(item: mum, tag: nothing) is true
+
+  let wanted be tag otherwise return true
+  return item.labels.contains(wanted)
+end
+
+public function visible(store: List of Item, show_all: Boolean, tag: maybe Text)
+  returns List of Item
+  purpose: The items a list shows, oldest first: the open ones or all, with the tag if one is given.
+  example: visible(store: demo_store, show_all: false, tag: nothing).length() is 2
+  example: visible(store: demo_store, show_all: true, tag: "home").length() is 2
+  example: visible(store: demo_store, show_all: false, tag: "home") is []
+
+  return for each item in store
+    where (show_all or not item.done) and has_tag(item: item, tag: tag)
+    sorted by item.id
+    collect item
+end
+
+public function week_start(today: Date) returns Date
+  purpose: The Monday of the week the day falls in.
+  example: week_start(Date(year: 2026, month: 10, day: 14)) is Date(year: 2026, month: 10, day: 12)
+  example: week_start(Date(year: 2026, month: 10, day: 12)) is Date(year: 2026, month: 10, day: 12)
+  example: week_start(Date(year: 2026, month: 10, day: 18)) is Date(year: 2026, month: 10, day: 12)
+
+  let offset be
+    match today.weekday()
+      when Monday then 0
+      when Tuesday then 1
+      when Wednesday then 2
+      when Thursday then 3
+      when Friday then 4
+      when Saturday then 5
+      when Sunday then 6
+    end
+  return today.minus_days(offset)
+end
+
+function done_between(item: Item, start: Date, finish: Date) returns Boolean
+  purpose: Whether the item was marked done on a day from the start to the finish, both included.
+  example: done_between(
+    item: bike,
+    start: Date(year: 2026, month: 10, day: 12),
+    finish: Date(year: 2026, month: 10, day: 14)
+  ) is true
+  example: done_between(
+    item: milk,
+    start: Date(year: 2026, month: 10, day: 12),
+    finish: Date(year: 2026, month: 10, day: 14)
+  ) is false
+
+  if not item.done then return false end
+  let day_text be item.done_on otherwise return false
+  let day be time.parse_date(day_text) otherwise return false
+  return day is at least start and day is at most finish
+end
+
+public function stats(store: List of Item, today: Date) returns Stats
+  purpose: The counts of the store, per tag, and the items done since this week's Monday.
+  example: stats(store: demo_store, today: Date(year: 2026, month: 10, day: 14)).done_this_week is 1
+  example: stats(store: demo_store, today: Date(year: 2026, month: 10, day: 14)).per_tag.length()
+    is 3
+
+  let start be week_start(today)
+  let open_total be for each item in store where not item.done count
+  let done_total be for each item in store where item.done count
+  let this_week be
+    for each item in store
+    where done_between(item: item, start: start, finish: today)
+    count
+  let untagged be for each item in store where item.labels.is_empty() count
+  let every_tag be for each item in store, label in item.labels collect label
+  let mutable per_tag: List of TagCount be []
+  for each tag in every_tag.distinct().sorted()
+    let open_here be for each item in store where not item.done and item.labels.contains(tag) count
+    let done_here be for each item in store where item.done and item.labels.contains(tag) count
+    change per_tag to per_tag.append(TagCount(tag: tag, open: open_here, done: done_here))
+  end
+  return Stats(
+    total: store.length(),
+    open: open_total,
+    done: done_total,
+    week_start: start,
+    done_this_week: this_week,
+    untagged: untagged,
+    per_tag: per_tag
+  )
+end

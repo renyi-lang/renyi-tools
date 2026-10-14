@@ -1,0 +1,276 @@
+module bills
+  purpose: Settle shared bills from a CSV file: balances, transfers, monthly totals and a report.
+
+import std.console
+import std.environment
+import std.filesystem exposing Path, FileError
+import rows exposing BillError
+import split exposing Bill, Balance, Transfer, MonthTotal
+
+public type UsageError is one of
+  purpose: The command line does not name a command and its files.
+  Usage(detail: Text)
+end
+
+let usage_query: Text be "renyi run bills.ry balances|settle|monthly <bills.csv>"
+
+let usage_report: Text be "renyi run bills.ry report <bills.csv> <out.md>"
+
+ability ToText for UsageError
+  function to_text(self) returns Text
+    match self
+      when Usage(detail) then return "{detail}; usage: {usage_query}, or {usage_report}"
+    end
+  end
+end
+
+function file_message(error: FileError) returns Text
+  purpose: A short reason for a failed file operation.
+
+  match error
+    when NotFound then return "no such file or directory"
+    when PermissionDenied then return "outside the grant of this run"
+    when InvalidEncoding then return "not UTF-8 text"
+    otherwise return error.to_text()
+  end
+end
+
+public function load(path: Path) returns List of Bill or fails with BillError needs filesystem.read
+  purpose: Read and check the bills of a CSV file.
+
+  let mutable text be ""
+  match filesystem.read_text(path)
+    when success(content) then change text to content
+    when failure(error) then fail with BadFile(file: path, detail: file_message(error))
+  end
+  return rows.parse_bills(file: path, text: text) otherwise fail
+end
+
+public function money(amount: Decimal) returns Text
+  purpose: An amount with exactly two decimal places.
+  example: money(3.5) is "3.50"
+  example: money(-12.255) is "-12.26"
+
+  return amount.rounded(2).to_text()
+end
+
+public function table_line(label: Text, width: Integer, cells: List of Text) returns Text
+  purpose: The label padded to the width, then each cell right-aligned in ten columns.
+  example: table_line(label: "bob", width: 6, cells: ["1.00", "-2.50"])
+    is "bob         1.00     -2.50"
+
+  let aligned be for each cell in cells collect cell.pad_left(10)
+  let padded be label.pad_right(width)
+  let joined be aligned.join("")
+  return "{padded}{joined}"
+end
+
+function name_width(names: List of Text) returns Integer
+  purpose: The width of a name column: two more than the longest name, "person" included.
+
+  let longest be for each name in names collect name.length()
+  let widest be longest.append(6).largest() otherwise 6
+  return widest + 2
+end
+
+public function balances_text(ledger: List of Balance) returns Text
+  purpose: The balances as a table, one person per line in name order, then the totals.
+
+  let width be name_width(for each balance in ledger collect balance.person)
+  let mutable lines be [table_line(label: "person", width: width, cells: ["paid", "owed", "net"])]
+  for each balance in ledger
+    let cells be [money(balance.paid), money(balance.owed), money(balance.net)]
+    change lines to lines.append(table_line(label: balance.person, width: width, cells: cells))
+  end
+  let paid be for each balance in ledger sum balance.paid
+  let owed be for each balance in ledger sum balance.owed
+  let net be for each balance in ledger sum balance.net
+  let totals be [money(paid), money(owed), money(net)]
+  change lines to lines.append(table_line(label: "total", width: width, cells: totals))
+  return lines.join("\n")
+end
+
+public function transfer_line(transfer: Transfer) returns Text
+  purpose: One transfer as a sentence: who pays whom how much.
+  example: transfer_line(Transfer(debtor: "bob", creditor: "alice", amount: 3.3))
+    is "bob pays alice 3.30"
+
+  return "{transfer.debtor} pays {transfer.creditor} {money(transfer.amount)}"
+end
+
+public function settlement_text(transfers: List of Transfer) returns Text
+  purpose: The transfers, one per line, or a line saying that nothing is owed.
+  example: settlement_text([]) is "nothing to settle"
+  example: settlement_text(
+    [
+      Transfer(debtor: "bob", creditor: "alice", amount: 2.00),
+      Transfer(debtor: "carol", creditor: "alice", amount: 1.50)
+    ]
+  ) is "bob pays alice 2.00\ncarol pays alice 1.50"
+
+  if transfers.is_empty() then return "nothing to settle" end
+  let lines be for each transfer in transfers collect transfer_line(transfer)
+  return lines.join("\n")
+end
+
+public function monthly_text(totals: List of MonthTotal) returns Text
+  purpose: The monthly totals as a table: each month's people in name order, then the month's total.
+
+  let width be name_width(for each total in totals collect total.person)
+  let mutable lines be [
+    table_line(label: "month    person", width: width + 9, cells: ["paid", "owed", "net"])
+  ]
+  let months be for each total in totals collect total.month
+  for each month in months.to_set().sorted()
+    let these be for each total in totals where total.month is month collect total
+    for each total in these
+      let cells be [money(total.paid), money(total.owed), money(total.net)]
+      let label be "{month}  {total.person}"
+      change lines to lines.append(table_line(label: label, width: width + 9, cells: cells))
+    end
+    let paid be for each total in these sum total.paid
+    let owed be for each total in these sum total.owed
+    let net be for each total in these sum total.net
+    let sums be [money(paid), money(owed), money(net)]
+    change lines to lines.append(table_line(label: "{month}  total", width: width + 9, cells: sums))
+  end
+  return lines.join("\n")
+end
+
+public function markdown_row(cells: List of Text) returns Text
+  purpose: One row of a Markdown table.
+  example: markdown_row(["alice", "1.00"]) is "| alice | 1.00 |"
+
+  let joined be cells.join(" | ")
+  return "| {joined} |"
+end
+
+public function report_markdown(file: Text, bills: List of Bill) returns Text
+  purpose: The Markdown report: a summary line, the balances, the settlement and the monthly totals.
+
+  let ledger be split.balances(bills)
+  let grand_total be for each bill in bills sum bill.amount
+  let dates be for each bill in bills collect bill.date
+  let earliest be dates.smallest() otherwise "-"
+  let latest be dates.largest() otherwise "-"
+  let total_text be money(grand_total)
+  let size be bills.length()
+  let summary be "`{file}`: {size} bills from {earliest} to {latest}, {total_text} in total."
+  let mutable lines be [
+    "# Shared bills",
+    "",
+    summary,
+    "",
+    "## Balances",
+    "",
+    "Net is paid minus owed: a positive net is money the others owe that person.",
+    "",
+    "| person | paid | owed | net |",
+    "|---|---:|---:|---:|"
+  ]
+  for each balance in ledger
+    let cells be [balance.person, money(balance.paid), money(balance.owed), money(balance.net)]
+    change lines to lines.append(markdown_row(cells))
+  end
+  let owed be for each balance in ledger sum balance.owed
+  let net be for each balance in ledger sum balance.net
+  let totals be ["**total**", money(grand_total), money(owed), money(net)]
+  change lines to lines.append(markdown_row(totals))
+  change lines to lines.append_all(["", "## Settlement", ""])
+  let transfers be split.settle(ledger)
+  if transfers.is_empty() then change lines to lines.append("Nothing to settle.") end
+  for each transfer in transfers
+    change lines to lines.append("- {transfer_line(transfer)}")
+  end
+  change lines to lines.append_all(
+    ["", "## By month", "", "| month | person | paid | owed | net |", "|---|---|---:|---:|---:|"]
+  )
+  for each total in split.monthly(bills)
+    let cells be [total.month, total.person, money(total.paid), money(total.owed), money(total.net)]
+    change lines to lines.append(markdown_row(cells))
+  end
+  let body be lines.join("\n")
+  return "{body}\n"
+end
+
+public function write_report(input: Path, output: Path)
+  returns Text
+  or fails with BillError
+  needs filesystem.read, filesystem.write
+  purpose: Read the bills of the input file, write their Markdown report to the output, return it.
+
+  let bills be load(input) otherwise fail
+  let markdown be report_markdown(file: input.name(), bills: bills)
+  match filesystem.write_text(path: output, content: markdown)
+    when failure(error) then fail with BadFile(file: output, detail: file_message(error))
+    otherwise return markdown
+  end
+end
+
+public function main()
+  or fails with BillError or UsageError
+  needs console, environment, filesystem.read, filesystem.write
+  purpose: Run the command the arguments name on the bills file they name.
+
+  let arguments be environment.arguments()
+  let command be arguments.at(0) otherwise fail with Usage(detail: "no command")
+  if not ["balances", "settle", "monthly", "report"].contains(command) then
+    fail with Usage(detail: "unknown command {command}")
+  end
+  let input be arguments.at(1) otherwise fail with Usage(detail: "no bills file")
+  if command is "report" then
+    let output be arguments.at(2) otherwise fail with Usage(detail: "no output file for the report")
+    if arguments.length() is greater than 3 then fail with Usage(detail: "too many arguments") end
+    let markdown be write_report(input: Path(input), output: Path(output)) otherwise fail
+    console.print("wrote {output} ({markdown.lines().length()} lines)")
+  otherwise
+    if arguments.length() is greater than 2 then fail with Usage(detail: "too many arguments") end
+    let bills be load(Path(input)) otherwise fail
+    if command is "balances" then
+      console.print(balances_text(split.balances(bills)))
+    otherwise if command is "settle" then
+      console.print(settlement_text(split.settle(split.balances(bills))))
+    otherwise
+      console.print(monthly_text(split.monthly(bills)))
+    end
+  end
+end
+
+test "the tables are aligned"
+  let ledger be [
+    Balance(person: "alice", paid: 10.00, owed: 3.34, net: 6.66),
+    Balance(person: "bob", paid: 0.00, owed: 6.66, net: -6.66)
+  ]
+  check balances_text(ledger).lines() is [
+    "person        paid      owed       net",
+    "alice        10.00      3.34      6.66",
+    "bob           0.00      6.66     -6.66",
+    "total        10.00     10.00      0.00"
+  ]
+  let totals be [
+    MonthTotal(month: "2026-01", person: "alice", paid: 4.00, owed: 2.00, net: 2.00),
+    MonthTotal(month: "2026-01", person: "bob", paid: 0.00, owed: 2.00, net: -2.00)
+  ]
+  check monthly_text(totals).lines() is [
+    "month    person        paid      owed       net",
+    "2026-01  alice         4.00      2.00      2.00",
+    "2026-01  bob           0.00      2.00     -2.00",
+    "2026-01  total         4.00      4.00      0.00"
+  ]
+end
+
+test "the sample report" needs filesystem.read, filesystem.write replays "fixtures/report.json"
+  let markdown be write_report(
+    input: Path("sample/bills.csv"),
+    output: Path("tmp/report.md")
+  ) otherwise crash with "the report of the sample failed"
+  check markdown.starts_with("# Shared bills\n")
+  check markdown.contains("## Settlement")
+  let bills be load(Path("sample/bills.csv")) otherwise crash with "the sample failed to load"
+  let ledger be split.balances(bills)
+  let net_total be for each balance in ledger sum balance.net
+  check net_total is 0.00
+  let after be split.remaining(ledger: ledger, transfers: split.settle(ledger))
+  let settled be for each balance in after all balance.net is 0.00
+  check settled
+end

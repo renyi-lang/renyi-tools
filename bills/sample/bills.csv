@@ -1,0 +1,16 @@
+date,payer,amount,description,participants
+2026-07-01,alice,1200.00,July rent,
+2026-07-03,bob,86.47,groceries,
+2026-07-08,carol,42.10,"pizza, salad and drinks",alice;bob;carol
+2026-07-15,dave,60.00,internet,
+2026-07-22,alice,25.00,cinema tickets,alice;dave
+2026-08-01,bob,1200.00,August rent,
+2026-08-04,carol,103.33,groceries,
+2026-08-10,bob,19.99,cleaning supplies,
+2026-08-17,dave,150.00,concert tickets,bob;carol;dave
+2026-08-29,carol,10.00,ice cream,dave
+2026-09-01,carol,1200.00,September rent,
+2026-09-05,dave,94.21,groceries,
+2026-09-12,bob,37.50,taxi to the airport,alice;bob;carol
+2026-09-20,carol,60.00,internet,
+2026-09-27,dave,0.07,stamp,alice;bob;carol;dave

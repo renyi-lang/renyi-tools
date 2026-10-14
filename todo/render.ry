@@ -1,0 +1,157 @@
+module render
+  purpose: The text the to-do tool prints: items, the list, the statistics, the errors, the usage.
+
+import items exposing Item, Stats, TagCount, TodoError
+import std.time exposing Date
+
+let usage_lines: List of Text be [
+  "usage: renyi run todo.ry <command> [arguments]",
+  "  add <title words...>     add an open item; #word in the title is a tag",
+  "  list [--all] [--tag t]   the open items (--all: the done ones too), oldest first",
+  "  done <id>                mark an item done today",
+  "  undo <id>                open a done item again",
+  "  edit <id> <title...>     replace an item's title and tags",
+  "  remove <id>              delete an item",
+  "  clear                    delete every done item",
+  "  stats                    counts per tag and the items done this week"
+]
+  purpose: The help text, one line per command.
+
+let sample_item: Item be Item(
+  id: 7,
+  title: "call the plumber",
+  labels: ["home", "urgent"],
+  done: false,
+  added_on: "2026-10-14",
+  done_on: nothing
+)
+  purpose: An open item of the examples with two tags.
+
+public function usage() returns List of Text
+  purpose: The help text, one line per command.
+  example: usage().length() is 9
+
+  return usage_lines
+end
+
+public function tag_text(labels: List of Text) returns Text
+  purpose: The tags as hash words after two spaces; nothing for an item without tags.
+  example: tag_text(["home", "urgent"]) is "  #home #urgent"
+  example: tag_text([]) is ""
+
+  if labels.is_empty() then return "" end
+  let words be for each label in labels collect "#{label}"
+  let separator be " "
+  return "  {words.join(separator)}"
+end
+
+public function item_line(item: Item) returns Text
+  purpose: One item as the list prints it: the id right-aligned, the box, the title, the tags.
+  example: item_line(sample_item) is "  7 [ ] call the plumber  #home #urgent"
+  example: item_line(sample_item with done: true, done_on: "2026-10-15")
+    is "  7 [x] call the plumber  #home #urgent  (done 2026-10-15)"
+
+  let number be "{item.id}".pad_left(3)
+  let mark be if item.done then "x" otherwise " " end
+  let done_text be
+    match item.done_on
+      when some(day) then "  (done {day})"
+      when nothing then ""
+    end
+  return "{number} [{mark}] {item.title}{tag_text(item.labels)}{done_text}"
+end
+
+public function action_line(verb: Text, item: Item) returns Text
+  purpose: The line that confirms a change to one item.
+  example: action_line(verb: "added", item: sample_item)
+    is "added 7: call the plumber  #home #urgent"
+
+  return "{verb} {item.id}: {item.title}{tag_text(item.labels)}"
+end
+
+public function list_lines(shown: List of Item, store: List of Item) returns List of Text
+  purpose: The list command's output: a line per shown item, then the store's open and done counts.
+  example: list_lines(shown: [sample_item], store: [sample_item])
+    is ["  7 [ ] call the plumber  #home #urgent", "1 open, 0 done"]
+  example: list_lines(shown: [], store: []) is ["nothing to show", "0 open, 0 done"]
+
+  let open_total be for each item in store where not item.done count
+  let done_total be store.length() - open_total
+  let mutable lines be for each item in shown collect item_line(item)
+  if lines.is_empty() then change lines to ["nothing to show"] end
+  return lines.append("{open_total} open, {done_total} done")
+end
+
+public function cleared_line(dropped: Integer) returns Text
+  purpose: The line that confirms the clear command.
+  example: cleared_line(1) is "cleared 1 done item"
+  example: cleared_line(3) is "cleared 3 done items"
+  example: cleared_line(0) is "nothing to clear"
+
+  if dropped is 0 then return "nothing to clear" end
+  let noun be if dropped is 1 then "item" otherwise "items" end
+  return "cleared {dropped} done {noun}"
+end
+
+function tag_line(entry: TagCount) returns Text
+  purpose: One tag's line of the statistics.
+  example: tag_line(TagCount(tag: "home", open: 2, done: 1)) is "  #home         2 open, 1 done"
+
+  let name be "#{entry.tag}"
+  return "  {name.pad_right(14)}{entry.open} open, {entry.done} done"
+end
+
+public function stats_lines(summary: Stats) returns List of Text
+  purpose: The stats command's output: the totals, this week's done items and the counts per tag.
+  example: stats_lines(
+    Stats(
+      total: 3,
+      open: 2,
+      done: 1,
+      week_start: Date(year: 2026, month: 10, day: 12),
+      done_this_week: 1,
+      untagged: 1,
+      per_tag: [TagCount(tag: "home", open: 1, done: 1)]
+    )
+  ) is [
+    "3 items: 2 open, 1 done",
+    "done this week (since 2026-10-12): 1",
+    "tags:",
+    "  #home         1 open, 1 done",
+    "  untagged items: 1"
+  ]
+
+  let mutable lines be [
+    "{summary.total} items: {summary.open} open, {summary.done} done",
+    "done this week (since {summary.week_start}): {summary.done_this_week}"
+  ]
+  if summary.per_tag.is_empty() then
+    change lines to lines.append("tags: none")
+  otherwise
+    change lines to lines.append("tags:")
+    for each entry in summary.per_tag
+      change lines to lines.append(tag_line(entry))
+    end
+  end
+  return lines.append("  untagged items: {summary.untagged}")
+end
+
+public function describe(error: TodoError) returns Text
+  purpose: The message for a failed command, in a sentence that says what to do.
+  example: describe(NoSuchItem(id: 9)) is "there is no item 9; `list --all` shows the ids"
+  example: describe(UnknownCommand(name: "dun"))
+    is "unknown command `dun`; `help` lists the commands"
+
+  return match error
+    when UnknownCommand(name) then "unknown command `{name}`; `help` lists the commands"
+    when UnknownOption(command, option) then "`{command}` has no option `{option}`"
+    when MissingArgument(command, what) then "`{command}` needs {what}"
+    when BadId(text) then "`{text}` is not an item id; an id is a whole number such as 3"
+    when NoSuchItem(id) then "there is no item {id}; `list --all` shows the ids"
+    when EmptyTitle then "the title has no words besides its tags"
+    when AlreadyDone(id) then "item {id} is already done"
+    when NotDone(id) then "item {id} is not done"
+    when BadStore(detail) then "the store cannot be used: {detail}"
+    when BadToday(text) then "TODO_TODAY is `{text}`, not a date of the form YYYY-MM-DD"
+  end
+end

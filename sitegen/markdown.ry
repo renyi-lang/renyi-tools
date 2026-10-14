@@ -1,0 +1,277 @@
+module markdown
+  purpose: Convert a small subset of Markdown to HTML with a line scanner; pure, no effects.
+
+public type Mode is one of
+  purpose: The block the scanner is inside: none, a paragraph, a list or a fenced code block.
+  Idle
+  Paragraph
+  Bullets
+  Numbered
+  Code
+  can Equal
+end
+
+public type Scan
+  purpose: The scanner's state: the HTML so far, the open block, its fence's language and its lines.
+  has html: Text
+  has mode: Mode
+  has language: Text
+  has pending: List of Text
+end
+
+public type Span
+  purpose: One inline construct at the start of a text: its HTML and how many characters it used.
+  has html: Text
+  has consumed: Integer
+end
+
+let no_lines: List of Text be []
+  purpose: The empty list of lines a closed block leaves behind.
+
+public let start: Scan be Scan(html: "", mode: Idle, language: "", pending: no_lines)
+  purpose: The scanner before the first line: no HTML, no open block.
+
+public function escape(text: Text) returns Text
+  purpose: The text with the three characters HTML reserves in text replaced by entities.
+  example: escape("a < b && c > d") is "a &lt; b &amp;&amp; c &gt; d"
+  example: escape("plain") is "plain"
+
+  return text.replace(old: "&", new: "&amp;").replace(old: "<", new: "&lt;").replace(
+    old: ">",
+    new: "&gt;"
+  )
+end
+
+public function escape_attribute(text: Text) returns Text
+  purpose: The text escaped for a double-quoted attribute value: escape, and the quote too.
+  example: escape_attribute("a\"b<c") is "a&quot;b&lt;c"
+
+  return escape(text).replace(old: "\"", new: "&quot;")
+end
+
+function delimited(rest: Text, marker: Text, tag: Text) returns maybe Span
+  purpose: The span of rest when it opens with marker and closes it later, wrapped in tag.
+  example: delimited(rest: "**a** b", marker: "**", tag: "strong")
+    is Span(html: "<strong>a</strong>", consumed: 5)
+  example: delimited(rest: "*a", marker: "*", tag: "em") is nothing
+  example: delimited(rest: "** a", marker: "**", tag: "strong") is nothing
+
+  let width be marker.length()
+  let body be rest.drop(width)
+  let close be body.index_of(marker) otherwise return nothing
+  if close is 0 then return nothing end
+  return Span(html: "<{tag}>{inline(body.take(close))}</{tag}>", consumed: close + width + width)
+end
+
+function code_span(rest: Text) returns maybe Span
+  purpose: The span of rest when it opens with a backquote and closes it later; its text escaped.
+  example: code_span("`a<b` c") is Span(html: "<code>a&lt;b</code>", consumed: 5)
+  example: code_span("`open") is nothing
+
+  let body be rest.drop(1)
+  let close be body.index_of("`") otherwise return nothing
+  return Span(html: "<code>{escape(body.take(close))}</code>", consumed: close + 2)
+end
+
+function link_span(rest: Text) returns maybe Span
+  purpose: The span of rest when it opens with a link [text](url).
+  example: link_span("[home](index.html) more")
+    is Span(html: "<a href=\"index.html\">home</a>", consumed: 18)
+  example: link_span("[home] (x)") is nothing
+
+  let middle be rest.index_of("](") otherwise return nothing
+  let after be rest.drop(middle + 2)
+  let stop be after.index_of(")") otherwise return nothing
+  let label be rest.drop(1).take(middle - 1)
+  let target be after.take(stop)
+  return Span(
+    html: "<a href=\"{escape_attribute(target)}\">{inline(label)}</a>",
+    consumed: middle + stop + 3
+  )
+end
+
+function span_at(rest: Text) returns maybe Span
+  purpose: The inline construct that opens rest, if one does: code, bold, italic or a link.
+  example: span_at("*x* y") is Span(html: "<em>x</em>", consumed: 3)
+  example: span_at("x *y*") is nothing
+
+  if rest.starts_with("`") then return code_span(rest) end
+  if rest.starts_with("**") then return delimited(rest: rest, marker: "**", tag: "strong") end
+  if rest.starts_with("*") then return delimited(rest: rest, marker: "*", tag: "em") end
+  if rest.starts_with("[") then return link_span(rest) end
+  return nothing
+end
+
+public function inline(text: Text) returns Text
+  purpose: The HTML of a block's text: code, bold, italic and links; everything else escaped.
+  example: inline("a < b") is "a &lt; b"
+  example: inline("**bold** and *it*") is "<strong>bold</strong> and <em>it</em>"
+  example: inline("see [the **docs**](a.html)")
+    is "see <a href=\"a.html\">the <strong>docs</strong></a>"
+  example: inline("`*not* <b>`") is "<code>*not* &lt;b&gt;</code>"
+  example: inline("2 * 3 * x") is "2 <em> 3 </em> x"
+
+  let size be text.length()
+  let mutable html be ""
+  let mutable position be 0
+  repeat until position is at least size
+    let rest be text.drop(position)
+    let span be span_at(rest) otherwise Span(html: escape(rest.take(1)), consumed: 1)
+    change html to "{html}{span.html}"
+    change position to position + span.consumed
+  end
+  return html
+end
+
+public function heading_level(line: Text) returns Integer
+  purpose: The level of an ATX heading line, one to three; zero for any other line.
+  example: heading_level("## Two") is 2
+  example: heading_level("#### Four") is 0
+  example: heading_level("#nospace") is 0
+  example: heading_level("plain") is 0
+
+  let mutable level be 0
+  repeat until level is at least line.length()
+    if line.drop(level).take(1) is not "#" then break end
+    change level to level + 1
+  end
+  if level is 0 or level is greater than 3 then return 0 end
+  if line.drop(level).take(1) is not " " then return 0 end
+  return level
+end
+
+public function numbered_prefix(line: Text) returns Integer
+  purpose: The width of an ordered list item's "12. " prefix; zero for any other line.
+  example: numbered_prefix("1. one") is 3
+  example: numbered_prefix("12. twelve") is 4
+  example: numbered_prefix("1.5 litres") is 0
+  example: numbered_prefix("one. two") is 0
+
+  let mutable digits be 0
+  repeat until digits is at least line.length()
+    if not "0123456789".contains(line.drop(digits).take(1)) then break end
+    change digits to digits + 1
+  end
+  if digits is 0 then return 0 end
+  if not line.drop(digits).starts_with(". ") then return 0 end
+  return digits + 2
+end
+
+function list_html(tag: Text, items: List of Text) returns Text
+  purpose: A list element of the tag with one item per text, each converted inline.
+  example: list_html(tag: "ul", items: ["a", "*b*"])
+    is "<ul>\n<li>a</li>\n<li><em>b</em></li>\n</ul>\n"
+
+  let mutable html be "<{tag}>\n"
+  for each item in items
+    change html to "{html}<li>{inline(item)}</li>\n"
+  end
+  return "{html}</{tag}>\n"
+end
+
+function code_html(language: Text, lines: List of Text) returns Text
+  purpose: A preformatted code block of the lines, escaped, with the fence's language as a class.
+  example: code_html(language: "", lines: ["a < b", "c"]) is "<pre><code>a &lt; b\nc</code></pre>\n"
+  example: code_html(language: "ry", lines: ["x"])
+    is "<pre><code class=\"language-ry\">x</code></pre>\n"
+
+  let body be escape(lines.join("\n"))
+  if language.is_empty() then return "<pre><code>{body}</code></pre>\n" end
+  return "<pre><code class=\"language-{escape_attribute(language)}\">{body}</code></pre>\n"
+end
+
+public function block_html(scan: Scan) returns Text
+  purpose: The HTML of the scanner's open block; empty when no block is open.
+  example: block_html(start) is ""
+  example: block_html(start with mode: Paragraph, pending: ["one", "two"]) is "<p>one\ntwo</p>\n"
+
+  let joined be scan.pending.join("\n")
+  match scan.mode
+    when Idle then return ""
+    when Paragraph then return "<p>{inline(joined)}</p>\n"
+    when Bullets then return list_html(tag: "ul", items: scan.pending)
+    when Numbered then return list_html(tag: "ol", items: scan.pending)
+    when Code then return code_html(language: scan.language, lines: scan.pending)
+  end
+end
+
+public function flush(scan: Scan) returns Scan
+  purpose: The scanner with its open block closed and written to the HTML.
+  example: flush(start with mode: Bullets, pending: ["a"]).html is "<ul>\n<li>a</li>\n</ul>\n"
+  example: flush(start with mode: Bullets, pending: ["a"]).mode is Idle
+
+  return Scan(html: "{scan.html}{block_html(scan)}", mode: Idle, language: "", pending: no_lines)
+end
+
+function add_line(scan: Scan, mode: Mode, line: Text) returns Scan
+  purpose: The scanner with the line added to an open block of the mode, opening one if needed.
+  example: add_line(scan: start, mode: Bullets, line: "a").pending is ["a"]
+  example: add_line(scan: step(scan: start, line: "p"), mode: Bullets, line: "a").html
+    is "<p>p</p>\n"
+
+  if scan.mode is mode then return scan with pending: scan.pending.append(line) end
+  return flush(scan) with mode: mode, pending: [line]
+end
+
+public function step(scan: Scan, line: Text) returns Scan
+  purpose: The scanner after one more line of Markdown.
+  example: step(scan: start, line: "# Title").html is "<h1>Title</h1>\n"
+  example: step(scan: start, line: "- item").mode is Bullets
+  example: step(scan: start, line: "3. item").mode is Numbered
+  example: step(scan: start, line: "```ry").language is "ry"
+  example: step(scan: (start with mode: Code, pending: ["# not a heading"]), line: "```").html
+    is "<pre><code># not a heading</code></pre>\n"
+
+  let trimmed be line.trim()
+  if scan.mode is Code then
+    if trimmed.starts_with("```") then return flush(scan) end
+    return scan with pending: scan.pending.append(line)
+  end
+  if trimmed.starts_with("```") then
+    return flush(scan) with mode: Code, language: trimmed.drop(3).trim()
+  end
+  if trimmed.is_empty() then return flush(scan) end
+  let level be heading_level(line)
+  if level is greater than 0 then
+    let closed be flush(scan)
+    let heading be inline(line.drop(level + 1).trim())
+    return closed with html: "{closed.html}<h{level}>{heading}</h{level}>\n"
+  end
+  if line.starts_with("- ") then return add_line(scan: scan, mode: Bullets, line: line.drop(2)) end
+  let prefix be numbered_prefix(line)
+  if prefix is greater than 0 then
+    return add_line(scan: scan, mode: Numbered, line: line.drop(prefix))
+  end
+  return add_line(scan: scan, mode: Paragraph, line: trimmed)
+end
+
+public function to_html(text: Text) returns Text
+  purpose: The HTML of a Markdown document, one element per block, each on its own lines.
+  example: to_html("# Hi\n\nSome *text*.\n") is "<h1>Hi</h1>\n<p>Some <em>text</em>.</p>\n"
+  example: to_html("- a\n- b\n1. c")
+    is "<ul>\n<li>a</li>\n<li>b</li>\n</ul>\n<ol>\n<li>c</li>\n</ol>\n"
+  example: to_html("") is ""
+
+  let mutable scan be start
+  for each line in text.lines()
+    change scan to step(scan: scan, line: line)
+  end
+  return flush(scan).html
+end
+
+public function title(text: Text, fallback: Text) returns Text
+  purpose: The text of a document's first heading outside a code block, or the fallback.
+  example: title(text: "intro\n## Second\n# First", fallback: "page") is "Second"
+  example: title(text: "```\n# code\n```\nno heading", fallback: "page") is "page"
+
+  let mutable fenced be false
+  for each line in text.lines()
+    if line.trim().starts_with("```") then
+      change fenced to not fenced
+      continue
+    end
+    let level be heading_level(line)
+    if not fenced and level is greater than 0 then return line.drop(level + 1).trim() end
+  end
+  return fallback
+end

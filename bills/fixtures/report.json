@@ -1,0 +1,50 @@
+{
+  "program": "bills",
+  "recorded_at": "2026-10-14T16:35:04.003Z",
+  "grant": [
+    "filesystem.read",
+    "filesystem.write"
+  ],
+  "calls": [
+    {
+      "sequence": 1,
+      "capability": "filesystem.read(\"sample/bills.csv\")",
+      "primitive": "std.filesystem.read_text",
+      "arguments": {
+        "path": "sample/bills.csv"
+      },
+      "outcome": {
+        "success": "date,payer,amount,description,participants\n2026-07-01,alice,1200.00,July rent,\n2026-07-03,bob,86.47,groceries,\n2026-07-08,carol,42.10,\"pizza, salad and drinks\",alice;bob;carol\n2026-07-15,dave,60.00,internet,\n2026-07-22,alice,25.00,cinema tickets,alice;dave\n2026-08-01,bob,1200.00,August rent,\n2026-08-04,carol,103.33,groceries,\n2026-08-10,bob,19.99,cleaning supplies,\n2026-08-17,dave,150.00,concert tickets,bob;carol;dave\n2026-08-29,carol,10.00,ice cream,dave\n2026-09-01,carol,1200.00,September rent,\n2026-09-05,dave,94.21,groceries,\n2026-09-12,bob,37.50,taxi to the airport,alice;bob;carol\n2026-09-20,carol,60.00,internet,\n2026-09-27,dave,0.07,stamp,alice;bob;carol;dave\n"
+      },
+      "duration_ms": 1,
+      "at_ms": 0
+    },
+    {
+      "sequence": 2,
+      "capability": "filesystem.write(\"tmp/report.md\")",
+      "primitive": "std.filesystem.write_text",
+      "arguments": {
+        "path": "tmp/report.md",
+        "content": "# Shared bills\n\n`bills.csv`: 15 bills from 2026-07-01 to 2026-09-27, 4288.67 in total.\n\n## Balances\n\nNet is paid minus owed: a positive net is money the others owe that person.\n\n| person | paid | owed | net |\n|---|---:|---:|---:|\n| alice | 1225.00 | 1045.08 | 179.92 |\n| bob | 1343.96 | 1082.55 | 261.41 |\n| carol | 1415.43 | 1082.55 | 332.88 |\n| dave | 304.28 | 1078.49 | -774.21 |\n| **total** | 4288.67 | 4288.67 | 0.00 |\n\n## Settlement\n\n- dave pays carol 332.88\n- dave pays bob 261.41\n- dave pays alice 179.92\n\n## By month\n\n| month | person | paid | owed | net |\n|---|---|---:|---:|---:|\n| 2026-07 | alice | 1225.00 | 363.16 | 861.84 |\n| 2026-07 | bob | 86.47 | 350.65 | -264.18 |\n| 2026-07 | carol | 42.10 | 350.65 | -308.55 |\n| 2026-07 | dave | 60.00 | 349.11 | -289.11 |\n| 2026-08 | alice | 0.00 | 330.84 | -330.84 |\n| 2026-08 | bob | 1219.99 | 380.83 | 839.16 |\n| 2026-08 | carol | 113.33 | 380.83 | -267.50 |\n| 2026-08 | dave | 150.00 | 390.82 | -240.82 |\n| 2026-09 | alice | 0.00 | 351.08 | -351.08 |\n| 2026-09 | bob | 37.50 | 351.07 | -313.57 |\n| 2026-09 | carol | 1260.00 | 351.07 | 908.93 |\n| 2026-09 | dave | 94.28 | 338.56 | -244.28 |\n"
+      },
+      "outcome": {
+        "success": null
+      },
+      "duration_ms": 3,
+      "at_ms": 3
+    },
+    {
+      "sequence": 3,
+      "capability": "filesystem.read(\"sample/bills.csv\")",
+      "primitive": "std.filesystem.read_text",
+      "arguments": {
+        "path": "sample/bills.csv"
+      },
+      "outcome": {
+        "success": "date,payer,amount,description,participants\n2026-07-01,alice,1200.00,July rent,\n2026-07-03,bob,86.47,groceries,\n2026-07-08,carol,42.10,\"pizza, salad and drinks\",alice;bob;carol\n2026-07-15,dave,60.00,internet,\n2026-07-22,alice,25.00,cinema tickets,alice;dave\n2026-08-01,bob,1200.00,August rent,\n2026-08-04,carol,103.33,groceries,\n2026-08-10,bob,19.99,cleaning supplies,\n2026-08-17,dave,150.00,concert tickets,bob;carol;dave\n2026-08-29,carol,10.00,ice cream,dave\n2026-09-01,carol,1200.00,September rent,\n2026-09-05,dave,94.21,groceries,\n2026-09-12,bob,37.50,taxi to the airport,alice;bob;carol\n2026-09-20,carol,60.00,internet,\n2026-09-27,dave,0.07,stamp,alice;bob;carol;dave\n"
+      },
+      "duration_ms": 0,
+      "at_ms": 7
+    }
+  ]
+}

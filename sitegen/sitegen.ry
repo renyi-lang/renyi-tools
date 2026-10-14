@@ -1,0 +1,86 @@
+module sitegen
+  purpose: Convert one Markdown file to HTML, or build a static site from a directory of them.
+
+import markdown
+import site exposing Page
+import std.console
+import std.environment
+import std.filesystem exposing Path, FileError
+
+public type UsageError
+  purpose: A command line the tool does not understand, with the one it does.
+  has usage: Text
+  can ToText
+end
+
+let usage: Text be "sitegen convert <file.md> | sitegen build <source> <output>"
+  purpose: The command lines the tool understands.
+
+public function read_pages(source: Path)
+  returns List of Page
+  or fails with FileError
+  needs filesystem.read
+  purpose: Every Markdown page of the directory, not recursive, in name order.
+
+  let paths be filesystem.list(source) otherwise fail
+  let mutable pages: List of Page be []
+  for each path in paths sorted by path
+    let name be site.page_name(path.name()) otherwise continue
+    let text be filesystem.read_text(path) otherwise fail
+    change pages to pages.append(site.page_of(name: name, text: text))
+  end
+  return pages
+end
+
+public function build(source: Path, output: Path)
+  returns List of Path
+  or fails with FileError
+  needs filesystem.read, filesystem.write
+  purpose: Write the site of the source directory into the output directory; the files written.
+
+  let pages be read_pages(source) otherwise fail
+  if not filesystem.exists(output) then filesystem.create_directory(output) otherwise fail end
+  let mutable written: List of Path be []
+  for each file in site.render_site(pages)
+    let path be output.join(file.file)
+    filesystem.write_text(path: path, content: file.html) otherwise fail
+    change written to written.append(path)
+  end
+  return written
+end
+
+public function convert(file: Path) returns Text or fails with FileError needs filesystem.read
+  purpose: The HTML of one Markdown file, without a page around it.
+
+  let text be filesystem.read_text(file) otherwise fail
+  return markdown.to_html(text)
+end
+
+public function main()
+  or fails with UsageError or FileError
+  needs console, environment, filesystem.read, filesystem.write
+  purpose: Run the command of the command line: convert one file, or build a site.
+
+  let arguments be environment.arguments()
+  let command be arguments.at(0) otherwise ""
+  if command is "convert" and arguments.length() is 2 then
+    let file be arguments.at(1) otherwise ""
+    let html be convert(Path(file)) otherwise fail
+    console.print(html.trim_end())
+    return
+  end
+  if command is "build" and arguments.length() is 3 then
+    let source be arguments.at(1) otherwise ""
+    let output be arguments.at(2) otherwise ""
+    let written be build(source: Path(source), output: Path(output)) otherwise fail
+    console.print("wrote {written.length()} files to {output}")
+    return
+  end
+  fail with UsageError(usage: usage)
+end
+
+test "the sample site builds" needs filesystem.read, filesystem.write replays "fixtures/build.json"
+  let written be build(source: Path("sample"), output: Path("test_out")) otherwise fail
+  check written.length() is 4
+  check written.at(0) is Path("test_out/index.html")
+end

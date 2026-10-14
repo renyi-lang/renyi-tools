@@ -1,0 +1,170 @@
+module site
+  purpose: Lay out converted Markdown pages as a site: the page template, the navigation, the index.
+
+import markdown
+
+public type Page
+  purpose: One source page: its name without the extension, its title and its body as HTML.
+  has name: Text
+  has title: Text
+  has body: Text
+end
+
+public type Output
+  purpose: One file of the site: its name in the output directory and its whole HTML.
+  has file: Text
+  has html: Text
+end
+
+let stylesheet: Text be """
+  body \{ font-family: system-ui, sans-serif; line-height: 1.55; color: #1d1d1f; }
+  body \{ max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  nav \{ display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; padding-bottom: 0.75rem; }
+  nav \{ border-bottom: 1px solid #ddd; }
+  nav a[aria-current] \{ font-weight: 600; text-decoration: none; color: inherit; }
+  a \{ color: #0b57d0; }
+  code \{ font-family: ui-monospace, monospace; background: #f3f3f3; padding: 0 0.2em; }
+  pre \{ background: #f3f3f3; padding: 0.75rem 1rem; overflow-x: auto; }
+  pre code \{ padding: 0; }
+  """
+  purpose: The stylesheet every page carries inline.
+
+public function page_name(file: Text) returns maybe Text
+  purpose: The page name of a Markdown file's name, without ".md"; nothing for any other file.
+  example: page_name("intro.md") is "intro"
+  example: page_name("notes.txt") is nothing
+  example: page_name(".md") is nothing
+
+  if not file.ends_with(".md") or file.length() is at most 3 then return nothing end
+  return file.take(file.length() - 3)
+end
+
+public function page_of(name: Text, text: Text) returns Page
+  purpose: The page of a Markdown source: titled by its first heading, or by its name without one.
+  example: page_of(name: "a", text: "# Alpha\n\nText.")
+    is Page(name: "a", title: "Alpha", body: "<h1>Alpha</h1>\n<p>Text.</p>\n")
+  example: page_of(name: "b", text: "No heading.").title is "b"
+
+  return Page(
+    name: name,
+    title: markdown.title(text: text, fallback: name),
+    body: markdown.to_html(text)
+  )
+end
+
+public function index_title(pages: List of Page) returns Text
+  purpose: The title of index.html: the title of the page named index, or "Index" without one.
+  example: index_title([Page(name: "index", title: "Home", body: "")]) is "Home"
+  example: index_title([Page(name: "a", title: "Alpha", body: "")]) is "Index"
+
+  for each page in pages
+    if page.name is "index" then return page.title end
+  end
+  return "Index"
+end
+
+function link(file: Text, title: Text, current: Text) returns Text
+  purpose: A link to a file of the site, marked as the current page when it is the file shown.
+  example: link(file: "a.html", title: "A & B", current: "x.html")
+    is "<a href=\"a.html\">A &amp; B</a>"
+  example: link(file: "a.html", title: "A", current: "a.html")
+    is "<a href=\"a.html\" aria-current=\"page\">A</a>"
+
+  let label be markdown.escape(title)
+  let target be markdown.escape_attribute(file)
+  if file is current then return "<a href=\"{target}\" aria-current=\"page\">{label}</a>" end
+  return "<a href=\"{target}\">{label}</a>"
+end
+
+public function navigation(pages: List of Page, current: Text) returns Text
+  purpose: The navigation bar: index.html first, then every other page in the order given.
+  example: navigation(pages: [Page(name: "a", title: "A", body: "")], current: "a.html").lines()
+    is [
+      "<nav>",
+      "<a href=\"index.html\">Index</a>",
+      "<a href=\"a.html\" aria-current=\"page\">A</a>",
+      "</nav>"
+    ]
+
+  let home be link(file: "index.html", title: index_title(pages), current: current)
+  let mutable html be "<nav>\n{home}\n"
+  for each page in pages where page.name is not "index"
+    let entry be link(file: "{page.name}.html", title: page.title, current: current)
+    change html to "{html}{entry}\n"
+  end
+  return "{html}</nav>\n"
+end
+
+public function document(title: Text, bar: Text, body: Text) returns Text
+  purpose: A whole HTML page: the head with the title and the stylesheet, the navigation, the body.
+  example: document(title: "T", bar: "", body: "").starts_with("<!doctype html>\n") is true
+  example: document(title: "a<b", bar: "", body: "").contains("<title>a&lt;b</title>") is true
+
+  let heading be markdown.escape(title)
+  return """
+    <!doctype html>
+    <html lang="en">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{heading}</title>
+    <style>
+    {stylesheet}
+    </style>
+    </head>
+    <body>
+    {bar}<main>
+    {body}</main>
+    </body>
+    </html>
+
+    """
+end
+
+public function index_body(pages: List of Page) returns Text
+  purpose: The body of index.html: the index page's own body, or a heading, then a list of pages.
+  example: index_body([Page(name: "a", title: "A", body: "")]).lines()
+    is [
+      "<h1>Index</h1>",
+      "<h2>Pages</h2>",
+      "<ul class=\"pages\">",
+      "<li><a href=\"a.html\">A</a></li>",
+      "</ul>"
+    ]
+  example: index_body([Page(name: "index", title: "Home", body: "<h1>Home</h1>\n")]).lines()
+    is ["<h1>Home</h1>", "<h2>Pages</h2>", "<ul class=\"pages\">", "</ul>"]
+
+  let mutable intro be "<h1>Index</h1>\n"
+  for each page in pages where page.name is "index"
+    change intro to page.body
+  end
+  let mutable html be "{intro}<h2>Pages</h2>\n<ul class=\"pages\">\n"
+  for each page in pages where page.name is not "index"
+    let entry be link(file: "{page.name}.html", title: page.title, current: "")
+    change html to "{html}<li>{entry}</li>\n"
+  end
+  return "{html}</ul>\n"
+end
+
+public function render_site(pages: List of Page) returns List of Output
+  purpose: Every file of the site: index.html first, then one file per page other than index.
+  example: render_site([]).length() is 1
+  example: render_site([Page(name: "a", title: "A", body: "")]).length() is 2
+
+  let index_html be document(
+    title: index_title(pages),
+    bar: navigation(pages: pages, current: "index.html"),
+    body: index_body(pages)
+  )
+  let mutable outputs be [Output(file: "index.html", html: index_html)]
+  for each page in pages where page.name is not "index"
+    let file be "{page.name}.html"
+    let html be document(
+      title: page.title,
+      bar: navigation(pages: pages, current: file),
+      body: page.body
+    )
+    change outputs to outputs.append(Output(file: file, html: html))
+  end
+  return outputs
+end

@@ -1,0 +1,334 @@
+module todo
+  purpose: Keep a to-do list in todo.json in the current directory: add, list, done, edit, stats.
+
+import items exposing Item, TodoError
+import render
+import std.console
+import std.environment
+import std.filesystem exposing Path, FileError
+import std.json
+import std.time exposing Date
+
+let store_path: Path be Path("todo.json")
+  purpose: The store, in the current directory; main's grant names this one file.
+
+let sample_path: Path be Path("sample/todo.json")
+  purpose: The sample store the recorded tests read.
+
+public type Command is one of
+  purpose: What the command line asked for.
+  Add(title: Text)
+  Show(show_all: Boolean, tag: maybe Text)
+  Done(id: Integer)
+  Undo(id: Integer)
+  Edit(id: Integer, title: Text)
+  Remove(id: Integer)
+  Clear
+  ShowStats
+  Help
+end
+
+public type Outcome
+  purpose: What a command prints and the store after it; changed says whether to write it back.
+  has lines: List of Text
+  has store: List of Item
+  has changed: Boolean
+end
+
+function id_argument(command: Text, rest: List of Text) returns Integer or fails with TodoError
+  purpose: The id that follows a command word.
+  example: id_argument(command: "done", rest: ["3"]) is 3
+  example: id_argument(command: "done", rest: [])
+    fails with MissingArgument(command: "done", what: "an item id")
+
+  let word be rest.at(0) otherwise fail with MissingArgument(command: command, what: "an item id")
+  return items.parse_id(word) otherwise fail
+end
+
+function tag_name(word: Text) returns Text
+  purpose: A tag as the list command takes it: with or without its hash sign, in any case.
+  example: tag_name("#Home") is "home"
+  example: tag_name("money") is "money"
+
+  if word.starts_with("#") then return word.drop(1).to_lower() end
+  return word.to_lower()
+end
+
+function parse_list(rest: List of Text) returns Command or fails with TodoError
+  purpose: The options of the list command: --all and --tag <tag>, in any order.
+  example: parse_list([]) is Show(show_all: false, tag: nothing)
+  example: parse_list(["--tag", "#home", "--all"]) is Show(show_all: true, tag: "home")
+  example: parse_list(["--tag"]) fails with MissingArgument(command: "list --tag", what: "a tag")
+  example: parse_list(["--done"]) fails with UnknownOption(command: "list", option: "--done")
+
+  let mutable show_all be false
+  let mutable wanted: maybe Text be nothing
+  let mutable position be 0
+  repeat until position is at least rest.length()
+    let word be rest.at(position) otherwise break
+    if word is "--all" then
+      change show_all to true
+    otherwise if word is "--tag" then
+      let value be rest.at(position + 1) otherwise fail with MissingArgument(
+        command: "list --tag",
+        what: "a tag"
+      )
+      change wanted to tag_name(value)
+      change position to position + 1
+    otherwise
+      fail with UnknownOption(command: "list", option: word)
+    end
+    change position to position + 1
+  end
+  return Show(show_all: show_all, tag: wanted)
+end
+
+public function parse_command(arguments: List of Text) returns Command or fails with TodoError
+  purpose: The command the arguments name; no arguments asks for help.
+  example: parse_command(["add", "buy", "milk", "#home"]) is Add(title: "buy milk #home")
+  example: parse_command(["list", "--all"]) is Show(show_all: true, tag: nothing)
+  example: parse_command(["edit", "4", "fix", "the", "car"]) is Edit(id: 4, title: "fix the car")
+  example: parse_command([]) is Help
+  example: parse_command(["finish", "3"]) fails with UnknownCommand(name: "finish")
+  example: parse_command(["done"]) fails with MissingArgument(command: "done", what: "an item id")
+  example: parse_command(["done", "x"]) fails with BadId(text: "x")
+  example: parse_command(["add"]) fails with MissingArgument(command: "add", what: "a title")
+
+  let verb be arguments.first() otherwise return Help
+  let rest be arguments.rest()
+  match verb
+    when "add" then
+      if rest.is_empty() then fail with MissingArgument(command: "add", what: "a title") end
+      return Add(title: rest.join(" "))
+    when "list" then return parse_list(rest) otherwise fail
+    when "done" then return Done(id: id_argument(command: verb, rest: rest) otherwise fail)
+    when "undo" then return Undo(id: id_argument(command: verb, rest: rest) otherwise fail)
+    when "remove" then return Remove(id: id_argument(command: verb, rest: rest) otherwise fail)
+    when "edit" then
+      let edited be id_argument(command: verb, rest: rest) otherwise fail
+      let words be rest.drop(1)
+      if words.is_empty() then
+        fail with MissingArgument(command: "edit", what: "an item id and a new title")
+      end
+      return Edit(id: edited, title: words.join(" "))
+    when "clear" then return Clear
+    when "stats" then return ShowStats
+    when "help" then return Help
+    otherwise fail with UnknownCommand(name: verb)
+  end
+end
+
+function today() returns Date or fails with TodoError needs environment("TODO_TODAY"), time
+  purpose: Today's date from the clock, or from TODO_TODAY (YYYY-MM-DD) when it is set.
+
+  let pinned be environment.get("TODO_TODAY") otherwise return time.today()
+  return time.parse_date(pinned) otherwise fail with BadToday(text: pinned)
+end
+
+function changed_item(verb: Text, store: List of Item, id: Integer)
+  returns Outcome
+  or fails with TodoError
+  purpose: The outcome of a command that changed one item: the confirming line and the new store.
+  example: changed_item(verb: "removed", store: [], id: 4) fails with NoSuchItem(id: 4)
+
+  let item be items.find(store: store, id: id) otherwise fail
+  return Outcome(lines: [render.action_line(verb: verb, item: item)], store: store, changed: true)
+end
+
+public function perform(command: Command, store: List of Item)
+  returns Outcome
+  or fails with TodoError
+  needs environment("TODO_TODAY"), time
+  purpose: Carry out one command on the store; the clock is read only by add, done and stats.
+
+  match command
+    when Add(title) then
+      let day be today() otherwise fail
+      let grown be items.added(store: store, title: title, today: "{day}") otherwise fail
+      let newest be grown.last() otherwise crash with "an added item is missing"
+      return changed_item(verb: "added", store: grown, id: newest.id) otherwise fail
+    when Show(show_all, tag) then
+      let shown be items.visible(store: store, show_all: show_all, tag: tag)
+      return Outcome(
+        lines: render.list_lines(shown: shown, store: store),
+        store: store,
+        changed: false
+      )
+    when Done(id) then
+      let finished_on be today() otherwise fail
+      let finished be items.marked_done(store: store, id: id, today: "{finished_on}") otherwise fail
+      return changed_item(verb: "done", store: finished, id: id) otherwise fail
+    when Undo(id) then
+      let reopened be items.reopened(store: store, id: id) otherwise fail
+      return changed_item(verb: "reopened", store: reopened, id: id) otherwise fail
+    when Edit(id, title) then
+      let retitled be items.retitled(store: store, id: id, title: title) otherwise fail
+      return changed_item(verb: "edited", store: retitled, id: id) otherwise fail
+    when Remove(id) then
+      let gone be items.find(store: store, id: id) otherwise fail
+      let rest be items.removed(store: store, id: id) otherwise fail
+      return Outcome(
+        lines: [render.action_line(verb: "removed", item: gone)],
+        store: rest,
+        changed: true
+      )
+    when Clear then
+      let kept be items.cleared(store)
+      let dropped be store.length() - kept.length()
+      return Outcome(
+        lines: [render.cleared_line(dropped)],
+        store: kept,
+        changed: dropped is greater than 0
+      )
+    when ShowStats then
+      let stats_day be today() otherwise fail
+      let summary be items.stats(store: store, today: stats_day)
+      return Outcome(lines: render.stats_lines(summary), store: store, changed: false)
+    when Help then return Outcome(lines: render.usage(), store: store, changed: false)
+  end
+end
+
+public function respond(arguments: List of Text, store: List of Item)
+  returns Outcome
+  or fails with TodoError
+  needs environment("TODO_TODAY"), time
+  purpose: Parse the command line and carry out its command on the store.
+
+  let command be parse_command(arguments) otherwise fail
+  return perform(command: command, store: store) otherwise fail
+end
+
+public function decode(text: Text) returns List of Item or fails with TodoError
+  purpose: The items of a store's text; an empty text is an empty store.
+  example: decode("") is []
+  example: decode("[]") is []
+  example: decode("\{}") fails with BadStore(detail: "it is not a JSON list of items")
+
+  if text.trim().is_empty() then return [] end
+  let store: List of Item be json.parse(text) otherwise fail with BadStore(
+    detail: "it is not a JSON list of items"
+  )
+  return store
+end
+
+public function encode(store: List of Item) returns Text
+  purpose: The text of a store: indented JSON and a final line break.
+  example: encode([]) is "[]\n"
+
+  return "{json.render_indented(store)}\n"
+end
+
+function read_store() returns Text or fails with TodoError needs filesystem.read("todo.json")
+  purpose: The text of todo.json; a missing file reads as an empty store.
+
+  match filesystem.read_text(store_path)
+    when success(text) then return text
+    when failure(problem) then
+      match problem
+        when NotFound then return ""
+        otherwise fail with BadStore(detail: "todo.json: {problem}")
+      end
+  end
+end
+
+function write_store(store: List of Item)
+  or fails with TodoError
+  needs filesystem.write("todo.json")
+  purpose: Replace todo.json with the store.
+
+  filesystem.write_text(
+    path: store_path,
+    content: encode(store)
+  ) otherwise fail with BadStore(detail: "todo.json cannot be written")
+end
+
+function execute(arguments: List of Text)
+  returns List of Text
+  or fails with TodoError
+  needs environment("TODO_TODAY"), time, filesystem.read("todo.json"), filesystem.write("todo.json")
+  purpose: Load the store, carry out the command, write the store back when it changed.
+
+  let store be decode(read_store() otherwise fail) otherwise fail
+  let outcome be respond(arguments: arguments, store: store) otherwise fail
+  if outcome.changed then write_store(outcome.store) otherwise fail end
+  return outcome.lines
+end
+
+public function main()
+  needs console, environment, time, filesystem.read("todo.json"), filesystem.write("todo.json")
+  purpose: Run the command the arguments name on todo.json and print what it says.
+
+  match execute(environment.arguments())
+    when success(lines) then
+      for each line in lines
+        console.print(line)
+      end
+    when failure(problem) then
+      console.print_error("todo: {render.describe(problem)}")
+      environment.exit(1)
+  end
+end
+
+function sample_store() returns List of Item or fails with TodoError needs filesystem.read("sample")
+  purpose: The items of the sample store the recorded tests read.
+
+  let text be filesystem.read_text(sample_path) otherwise fail with BadStore(
+    detail: "sample/todo.json cannot be read"
+  )
+  return decode(text) otherwise fail
+end
+
+test "add" needs filesystem.read("sample"), environment, time replays "fixtures/add.json"
+  let store be sample_store() otherwise fail
+  let words be ["add", "call", "the", "plumber", "#home"]
+  let outcome be respond(arguments: words, store: store) otherwise fail
+  check outcome.lines is ["added 7: call the plumber  #home"]
+  check outcome.changed
+  check outcome.store.length() is store.length() + 1
+  let newest be outcome.store.last() otherwise crash with "the store is empty"
+  check newest.added_on is "2026-10-14"
+  check newest.done is false
+end
+
+test "list" needs filesystem.read("sample"), environment, time replays "fixtures/list.json"
+  let store be sample_store() otherwise fail
+  let open be respond(arguments: ["list"], store: store) otherwise fail
+  check open.lines is [
+    "  2 [ ] file taxes  #money",
+    "  5 [ ] call mum",
+    "  6 [ ] renew the passport  #admin #travel",
+    "3 open, 3 done"
+  ]
+  check open.changed is false
+  let tagged be respond(arguments: ["list", "--all", "--tag", "home"], store: store) otherwise fail
+  check tagged.lines is [
+    "  1 [x] buy milk  #home  (done 2026-10-02)",
+    "  4 [x] fix the bike  #home #weekend  (done 2026-10-13)",
+    "3 open, 3 done"
+  ]
+end
+
+test "done" needs filesystem.read("sample"), environment, time replays "fixtures/done.json"
+  let store be sample_store() otherwise fail
+  let outcome be respond(arguments: ["done", "2"], store: store) otherwise fail
+  check outcome.lines is ["done 2: file taxes  #money"]
+  let item be items.find(store: outcome.store, id: 2) otherwise fail
+  check item.done
+  check item.done_on is "2026-10-14"
+end
+
+test "stats" needs filesystem.read("sample"), environment, time replays "fixtures/stats.json"
+  let store be sample_store() otherwise fail
+  let outcome be respond(arguments: ["stats"], store: store) otherwise fail
+  check outcome.lines is [
+    "6 items: 3 open, 3 done",
+    "done this week (since 2026-10-12): 2",
+    "tags:",
+    "  #admin        1 open, 0 done",
+    "  #home         0 open, 2 done",
+    "  #money        1 open, 0 done",
+    "  #travel       1 open, 0 done",
+    "  #weekend      0 open, 1 done",
+    "  untagged items: 2"
+  ]
+end

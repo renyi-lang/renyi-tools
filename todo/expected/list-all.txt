@@ -1,0 +1,7 @@
+  1 [x] buy milk  #home  (done 2026-10-02)
+  2 [ ] file taxes  #money
+  3 [x] water the plants  (done 2026-10-12)
+  4 [x] fix the bike  #home #weekend  (done 2026-10-13)
+  5 [ ] call mum
+  6 [ ] renew the passport  #admin #travel
+3 open, 3 done
