@@ -19,7 +19,7 @@ let usage: Text be "sitegen convert <file.md> | sitegen build <source> <output>"
 public function read_pages(source: Path)
   returns List of Page
   or fails with FileError
-  needs filesystem.read
+  needs filesystem.read(".")
   purpose: Every Markdown page of the directory, not recursive, in name order.
 
   let paths be filesystem.list(source) otherwise fail
@@ -35,7 +35,7 @@ end
 public function build(source: Path, output: Path)
   returns List of Path
   or fails with FileError
-  needs filesystem.read, filesystem.write
+  needs filesystem.read("."), filesystem.write(".")
   purpose: Write the site of the source directory into the output directory; the files written.
 
   let pages be read_pages(source) otherwise fail
@@ -49,7 +49,7 @@ public function build(source: Path, output: Path)
   return written
 end
 
-public function convert(file: Path) returns Text or fails with FileError needs filesystem.read
+public function convert(file: Path) returns Text or fails with FileError needs filesystem.read(".")
   purpose: The HTML of one Markdown file, without a page around it.
 
   let text be filesystem.read_text(file) otherwise fail
@@ -58,7 +58,7 @@ end
 
 public function main()
   or fails with UsageError or FileError
-  needs console, environment, filesystem.read, filesystem.write
+  needs console, environment, filesystem.read("."), filesystem.write(".")
   purpose: Run the command of the command line: convert one file, or build a site.
 
   let arguments be environment.arguments()
@@ -79,7 +79,7 @@ public function main()
   fail with UsageError(usage: usage)
 end
 
-test "the sample site builds" needs filesystem.read, filesystem.write replays "fixtures/build.json"
+test "site builds" needs filesystem.read("."), filesystem.write(".") replays "fixtures/build.json"
   let written be build(source: Path("sample"), output: Path("test_out")) otherwise fail
   check written.length() is 4
   check written.at(0) is Path("test_out/index.html")

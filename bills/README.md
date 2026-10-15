@@ -139,20 +139,23 @@ A wrong command line also fails with status 1 and the usage.
 ```
 public function main()
   or fails with BillError or UsageError
-  needs console, environment, filesystem.read, filesystem.write
+  needs console, environment, filesystem.read("."), filesystem.write(".")
 ```
 
 `console` prints, `environment` reads the arguments, `filesystem.read`
 reads the bills file and `filesystem.write` writes the report (only the
-`report` command calls it). The two filesystem capabilities carry no scope
-because both paths come from the command line: a scope is a literal fixed
+`report` command calls it). The two filesystem capabilities are scoped to
+the current directory and no narrower, because both paths come from the
+command line: a scope is a literal fixed
 when the program is written (`filesystem.read("data")`), and the run-time
 check refuses every path outside it. With `filesystem.read("sample")` the
 program reads `sample/bills.csv` and `./sample/bills.csv` but refuses an
-absolute path and anything outside `sample/`; `filesystem.read(".")`
-refuses even `bills.csv` in the working directory. The checker accepts any
-literal scope here, since the path is only known at run time; the scope is
-the run's business.
+absolute path and anything outside `sample/`; `filesystem.read(".")`, the
+scope this program declares, allows every relative path that does not climb
+out of the working directory and refuses every absolute one (release 0.2.1;
+at 0.2.0 it refused even `bills.csv`). The checker accepts any literal scope
+here, since the path is only known at run time; the scope is the run's
+business.
 
 Whoever runs the program narrows the grant on the command line, and the
 library primitives enforce it:
@@ -178,16 +181,16 @@ renyi test bills.ry           # every example of the three modules and the three
 `renyi test bills.ry` runs the examples of `bills.ry` and of the modules it
 imports, a test of the invariants in `split.ry` (the nets sum to zero, the
 settlement zeroes every balance in at most `p - 1` transfers), a test of
-the table layout, and `"the sample report"`, which writes the report of
+the table layout, and `"report"`, which writes the report of
 the sample and checks the same invariants on it. That test needs
-`filesystem.read` and `filesystem.write` and replays
+`filesystem.read(".")` and `filesystem.write(".")` and replays
 `fixtures/report.json`: `renyi test` answers its read of
 `sample/bills.csv` and its write of `tmp/report.md` from the recording and
 touches nothing on disk. It was recorded once, live:
 
 ```sh
 mkdir tmp
-renyi test --refresh "the sample report" bills.ry
+renyi test --refresh "report" bills.ry
 rm -r tmp
 ```
 

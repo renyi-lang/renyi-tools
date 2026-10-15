@@ -46,8 +46,8 @@ and the output depends only on the sources, so `expected/` can be compared byte
 for byte:
 
 ```
-renyi run sitegen.ry build sample /tmp/site
-diff -r --exclude=page.convert.html /tmp/site expected
+renyi run sitegen.ry build sample site
+diff -r --exclude=page.convert.html site expected
 renyi run sitegen.ry convert sample/page.md | diff - expected/page.convert.html
 ```
 
@@ -60,24 +60,26 @@ A failure ends the run with exit status 1 and names its cause:
 ```
 public function main()
   or fails with UsageError or FileError
-  needs console, environment, filesystem.read, filesystem.write
+  needs console, environment, filesystem.read("."), filesystem.write(".")
 ```
 
 This line is everything the program can do outside its own memory: print
-(`console`), read its command line (`environment`), read files and write files.
+(`console`), read its command line (`environment`), read and write files under
+the directory it runs in.
 Nothing else: no network, no other programs, no clock, no randomness. A reviewer
 reads it from the signature without reading the body, and the checker has
 verified that no function the program calls needs more.
 
-The two file capabilities are unscoped, and that is a deliberate choice. A scope
-in `needs` is a text literal, a path prefix fixed when the program is written
-(`filesystem.read("sample")`), so a scoped grant cannot follow a directory given
-on the command line. The current directory as a prefix does not help either: with
-release 0.2.0 a scope of `"."`, `"./"` or `""` refused the relative path `sample`
-with `PermissionDenied`, so only the unscoped capability lets the tool take its
-directories as arguments. `build` and `convert` declare the same unscoped
-capabilities, since they take their paths as parameters; the pure modules,
-`markdown.ry` and `site.ry`, declare nothing and the checker holds them to it.
+The two file capabilities are scoped to the current directory, `"."`: a
+scope in `needs` is a text literal fixed when the program is written, and
+the tool takes its directories from the command line, so the widest prefix
+that still says something is the directory the tool runs in. Every relative
+path that does not climb out of it is allowed and every absolute path is
+refused with `PermissionDenied` (release 0.2.1; at 0.2.0 that scope refused
+every relative path). `build`, `convert` and `read_pages` declare the same
+scope, since a function's scoped grant does not cover a callee's wider one;
+the pure modules, `markdown.ry` and `site.ry`, declare nothing and the
+checker holds them to it.
 
 What the program may touch is narrowed when it is run, and only narrowed: the
 command line can tighten the grant, never widen it.
@@ -106,18 +108,18 @@ naming the path the grant does not allow.
 ## The tests
 
 `renyi test sitegen.ry` runs every `example:` of `markdown.ry` and `site.ry` and
-the test `"the sample site builds"`, which calls `build(source: Path("sample"),
+the test `"site builds"`, which calls `build(source: Path("sample"),
 output: Path("test_out"))`. That test has effects, so it is tested through a
 recording:
 
 ```
-test "the sample site builds" needs filesystem.read, filesystem.write replays "fixtures/build.json"
+test "site builds" needs filesystem.read("."), filesystem.write(".") replays "fixtures/build.json"
 ```
 
 It was recorded once, live, with
 
 ```
-renyi test --refresh "the sample site builds" sitegen.ry
+renyi test --refresh "site builds" sitegen.ry
 rm -r test_out
 ```
 

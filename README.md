@@ -8,19 +8,18 @@ the VM refuses it again at run time.
 
 | Tool | Directory | What it does | The grant of `main` |
 |------|-----------|--------------|---------------------|
-| sitegen | [`sitegen/`](sitegen/) | a static site generator with a Markdown-to-HTML converter (`convert <file.md>`, `build <source> <output>`) | `console, environment, filesystem.read, filesystem.write` |
+| sitegen | [`sitegen/`](sitegen/) | a static site generator with a Markdown-to-HTML converter (`convert <file.md>`, `build <source> <output>`) | `console, environment, filesystem.read("."), filesystem.write(".")` |
 | todo | [`todo/`](todo/) | a to-do list in a JSON file of the current directory (`add`, `list`, `done`, `undo`, `remove`, `edit`, `clear`, `stats`) | `console, environment, time, filesystem.read("todo.json"), filesystem.write("todo.json")` |
-| bills | [`bills/`](bills/) | shared bills from a CSV: `balances`, `settle` (who pays whom), `monthly`, `report <out.md>` | `console, environment, filesystem.read, filesystem.write` |
+| bills | [`bills/`](bills/) | shared bills from a CSV: `balances`, `settle` (who pays whom), `monthly`, `report <out.md>` | `console, environment, filesystem.read("."), filesystem.write(".")` |
 
 The to-do tool's grant names the one file it may read and write. The
 other two take their paths from the command line, so their `main`
-declares the unscoped capabilities and the person running them narrows
-the grant from outside: `renyi run bills.ry report sample/bills.csv out.md
---allow-read sample --allow-write out.md`, or a `--sandbox` grant file;
-each README shows it. (At release 0.2.0 a scope of the current directory,
-`filesystem.read(".")`, refused every relative path; that is fixed on the
-main repository's `main` after the release, and the next release lets
-these two tools declare `"."`.)
+declares the current directory, `"."`: every relative path that does not
+climb out of it, and no absolute one (release 0.2.1; at 0.2.0 that scope
+refused every relative path). The person running them can narrow the
+grant further from outside: `renyi run bills.ry report sample/bills.csv
+out.md --allow-read sample --allow-write out.md`, or a `--sandbox` grant
+file; each README shows it.
 
 Every tool follows the starter pack of the main repository: the logic in
 pure modules with an `example:` on every function, the effects in a few

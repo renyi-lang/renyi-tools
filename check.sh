@@ -18,8 +18,8 @@ for tool in sitegen todo bills; do
 done
 
 echo "== sitegen outputs"
-(cd sitegen && "$RENYI" run sitegen.ry build sample "$work/site" > /dev/null)
-diff -r --exclude=page.convert.html "$work/site" sitegen/expected
+(cd sitegen && rm -rf .check && "$RENYI" run sitegen.ry build sample .check/site > /dev/null)
+diff -r --exclude=page.convert.html sitegen/.check/site sitegen/expected
 (cd sitegen && "$RENYI" run sitegen.ry convert sample/page.md) | diff - sitegen/expected/page.convert.html
 
 echo "== todo outputs"
@@ -32,8 +32,8 @@ echo "== bills outputs"
 for command in balances settle monthly; do
   (cd bills && "$RENYI" run bills.ry "$command" sample/bills.csv) | diff - "bills/expected/$command.txt"
 done
-(cd bills && "$RENYI" run bills.ry report sample/bills.csv "$work/report.md" > /dev/null)
-diff "$work/report.md" bills/expected/report.md
+(cd bills && rm -rf .check && mkdir .check && "$RENYI" run bills.ry report sample/bills.csv .check/report.md > /dev/null)
+diff bills/.check/report.md bills/expected/report.md
 
 rm -rf "$work"
 echo "every tool passes"

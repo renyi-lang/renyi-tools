@@ -35,7 +35,10 @@ function file_message(error: FileError) returns Text
   end
 end
 
-public function load(path: Path) returns List of Bill or fails with BillError needs filesystem.read
+public function load(path: Path)
+  returns List of Bill
+  or fails with BillError
+  needs filesystem.read(".")
   purpose: Read and check the bills of a CSV file.
 
   let mutable text be ""
@@ -196,7 +199,7 @@ end
 public function write_report(input: Path, output: Path)
   returns Text
   or fails with BillError
-  needs filesystem.read, filesystem.write
+  needs filesystem.read("."), filesystem.write(".")
   purpose: Read the bills of the input file, write their Markdown report to the output, return it.
 
   let bills be load(input) otherwise fail
@@ -209,7 +212,7 @@ end
 
 public function main()
   or fails with BillError or UsageError
-  needs console, environment, filesystem.read, filesystem.write
+  needs console, environment, filesystem.read("."), filesystem.write(".")
   purpose: Run the command the arguments name on the bills file they name.
 
   let arguments be environment.arguments()
@@ -259,7 +262,7 @@ test "the tables are aligned"
   ]
 end
 
-test "the sample report" needs filesystem.read, filesystem.write replays "fixtures/report.json"
+test "report" needs filesystem.read("."), filesystem.write(".") replays "fixtures/report.json"
   let markdown be write_report(
     input: Path("sample/bills.csv"),
     output: Path("tmp/report.md")
